@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import uuid
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Any
@@ -31,6 +30,8 @@ from core.agent.graph import AgentTurn, ask, decide
 from core.config.schema import EngagementConfig
 from core.guardrails import BLOCKED_ANSWER, check_input
 from core.guardrails.pii import redact
+from core.observability.context import current_trace_id
+from core.observability.metrics import APPROVALS, GUARDRAIL_BLOCKS
 
 DbFactory = Callable[[], AbstractContextManager[psycopg.Connection]]
 MAX_DETAIL = 2000  # characters of a tool result kept in the audit log
@@ -42,25 +43,29 @@ class AgentService:
 
     # ------------------------------------------------------------------ public API
     def chat(self, thread_id: str, message: str, user: str = "anonymous") -> AgentTurn:
-        trace = uuid.uuid4().hex
+        trace = current_trace_id()  # = the OpenTelemetry trace id of this request, so audit rows join traces
         blocked = check_input(message, self.cfg.guardrails)
         if blocked:  # direct prompt injection: refuse without calling the model or any tool (T-02)
+            GUARDRAIL_BLOCKS.labels("input_injection").inc()
             turn = AgentTurn(thread_id, "done", answer=BLOCKED_ANSWER)
             first = {"event": "guardrail_blocked", "detail": {"user": user, "matched": blocked, **self._text(message)}}
             self._record(turn, trace, first=first)
             return turn
         turn = ask(self.agent, self.cfg, thread_id, message)
+        if turn.pending:
+            APPROVALS.labels("requested").inc(len(turn.pending))
         self._record(turn, trace, first={"event": "user_message", "detail": {"user": user, **self._text(message)}})
         return turn
 
     def decide(self, thread_id: str, *, approved: bool, by: str, reason: str = "") -> AgentTurn:
-        trace = uuid.uuid4().hex
+        trace = current_trace_id()
         claimed = self._claim(thread_id, approved, by)
         try:
             turn = decide(self.agent, self.cfg, thread_id, approved=approved, by=by, reason=reason)
         except Exception:
             self._unclaim(claimed)  # the graph could not resume: put the approval back to pending
             raise
+        APPROVALS.labels("approved" if approved else "rejected").inc(len(claimed) or 1)
         decision = {"event": "approval_decided",
                     "detail": {"approved": approved, "by": by, "reason": reason, "approval_ids": claimed}}
         self._record(turn, trace, first=decision)

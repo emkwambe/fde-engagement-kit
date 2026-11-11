@@ -68,8 +68,8 @@ and latency of the results they reused. The real eval of demo-logistics is still
 
 | Phase | Status | Commits | Tests | Evidence |
 |---|---|---|---|---|
-| 0 Day 3 close-out | Done (real eval INCOMPLETE, see NEEDS HUMAN) | see section 3 | 137 passed | `docs/teaching/15-measuring-quality.md`, `docs/16-deferred-ideas.md`, DC-016 |
-| 1 Observability + endpoints | Not started | | | |
+| 0 Day 3 close-out | Done (real eval INCOMPLETE, see NEEDS HUMAN) | `27222c7` | 137 passed | `docs/teaching/15-measuring-quality.md`, `docs/16-deferred-ideas.md`, DC-016 |
+| 1 Observability + endpoints | Done | see Phase 1 checklist | 146 passed | `docs/teaching/16-observability.md`, `tests/day03/test_observability.py`, DC-017 |
 | 2 Day 4 platform | Not started | | | |
 | 3a Kit generic | Not started | | | |
 | 3b Engagement #2 | Not started | | | |
@@ -89,6 +89,25 @@ and latency of the results they reused. The real eval of demo-logistics is still
 - [x] Extra item (sponsor): runner separates "this run" from "carried over"; test
       `tests/day03/test_model_params.py::test_resumed_results_do_not_count_as_this_runs_cost_or_latency`.
       The 0811 report files are unchanged (historical record); explained in note 15 practicum 4 and Findings F-01.
+
+### Phase 1
+
+- [x] Structured JSON request log (trace id, route, status, duration, model calls, tokens, tool names; no prompt text):
+      `core/observability/logging.py`, middleware `observe` in `core/api/main.py`; test
+      `test_a_tool_calling_chat_is_one_trace_that_matches_the_audit_log` asserts the line has no question text.
+- [x] `/metrics` (prometheus-client) with requests/latency by route, model calls and tokens, tool calls by tool,
+      approvals by outcome, guardrail blocks. Scraped with `Invoke-WebRequest` (note 16 practicum 2), non-zero:
+      `fde_http_requests_total{method="POST",route="/chat",status="200"} 3.0`, `fde_tool_calls_total{outcome="ok",tool="query_ops_db"} 2.0`,
+      `fde_approvals_total{outcome="requested"} 1.0`, `fde_guardrail_blocks_total{kind="input_injection"} 1.0`.
+- [x] OpenTelemetry spans request -> agent.run -> agent.step -> llm.call / tool, console exporter by default, OTLP by env.
+      Trace id = `agent.audit_log.trace_id` = `X-Trace-Id`: one real trace of a tool-calling `/chat` (fake model, real graph,
+      tools and DB) pasted in note 16 practicum 1, trace `d254bd3fdfeb986567093f5bf36409ce`, 4 audit rows with the same id.
+- [x] `POST /ingest` and `POST /eval` (bearer `ADMIN_TOKEN`, fail closed; `/eval` fake only, 409 otherwise); documented in
+      `docs/10-security-and-compliance.md` sections 4-5. Tests: `test_admin_endpoints_fail_closed_without_a_token`,
+      `test_admin_endpoints_reject_a_wrong_token`, `test_eval_endpoint_refuses_real_model_runs`, `test_eval_endpoint_runs_fake_cases`,
+      `test_ingest_endpoint_returns_the_load_counts`.
+- [x] Favicon: inline SVG in `ui/index.html`.
+- [x] Note 16, DC-017 (includes the formal D-11 Streamlit -> HTML console deviation), tests + lint green (gate output in the commit).
 
 ## 4. Evals
 
@@ -132,6 +151,12 @@ and latency of the results they reused. The real eval of demo-logistics is still
   the provider's 429 message as its example input. Origin: the Day 3 part 2 test was written from the real error text.
   Caught by: the executor's pre-commit grep for `org-` ids. Fix: replaced with a made-up id of the same shape (the test
   checks the same pattern). It never reached git (`gitleaks git .` -> "no leaks found").
+- **F-05 A stale API process held port 8000.** An API started at 06:56 (before this sprint, PID 15616) still answered on
+  port 8000 with pre-sprint code: its `/health` had no `embeddings_match` field. My new server failed to bind
+  (`[winerror 10048] only one usage of each socket address`). Caught by: reading the `/health` output. Handling: captured
+  note 16 on port 8001; did not stop the human's process (NEEDS HUMAN item 2). Phase 2 adds the build version to `/health`.
+- **F-06 FastAPI 0.162 emits its own spans** (`POST /chat` root, `fastapi.endpoint`, ...) once a tracer provider exists.
+  Not planned, harmless: our spans nest inside. Documented in note 16.
 - **F-03 Logistics content in `core/`** beyond the brief's list (scoring `WRITE_TOOLS`, refusal text, doc tool description,
   system prompt). Handled in Phase 3a.
 
@@ -159,6 +184,14 @@ Other spend: $0 (no cloud resources created).
    ```
    Expected: a new report; if the quota stops it again, resume from the NEWEST report it printed. Send back the report file name.
    (This item is updated at the end of the sprint with the newest report to resume from.)
+
+2. **Stop the stale API on port 8000.** Why: it runs code from before Sprint 01 (F-05), so anything you try on port 8000
+   shows old behaviour. It is your process, so I did not stop it.
+   ```powershell
+   Get-NetTCPConnection -LocalPort 8000 -State Listen | ForEach-Object { Get-Process -Id $_.OwningProcess } | Format-Table Id, ProcessName, StartTime
+   Stop-Process -Id 15616      # only if the line above shows that PID; then restart with .	asks.ps1 api
+   ```
+   Expected: `/health` on port 8000 then shows `embeddings_match` (and, after Phase 2, `version`).
 
 ## 10. Risks and open questions
 

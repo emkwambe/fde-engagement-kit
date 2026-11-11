@@ -20,13 +20,18 @@ from langchain_core.tools import BaseTool, StructuredTool
 from core.config.schema import Guardrails
 from core.guardrails.injection import neutralize
 from core.guardrails.pii import redact
+from core.observability.metrics import GUARDRAIL_BLOCKS
 
 
 def _clean_string(text: str, cfg: Guardrails) -> str:
     if cfg.injection_filter:
-        text, _ = neutralize(text)
+        text, removed = neutralize(text)
+        if removed:
+            GUARDRAIL_BLOCKS.labels("tool_injection").inc(removed)
     if cfg.pii_redaction:
-        text, _ = redact(text, cfg.pii_redaction)
+        text, counts = redact(text, cfg.pii_redaction)
+        for kind, n in counts.items():
+            GUARDRAIL_BLOCKS.labels(f"pii_{kind}").inc(n)
     return text
 
 

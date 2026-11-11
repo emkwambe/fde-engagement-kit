@@ -8,6 +8,7 @@ from collections.abc import Iterator
 import pytest
 
 os.environ["FAKE_LLM"] = "1"
+os.environ.setdefault("OTEL_TRACES_EXPORTER", "none")  # tests capture spans in memory, not on stdout
 os.environ.setdefault("DATABASE_URL", "postgresql://fde:fde@localhost:5432/fde")
 os.environ.setdefault("ENGAGEMENT", "demo-logistics")
 

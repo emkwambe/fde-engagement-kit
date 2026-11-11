@@ -42,6 +42,7 @@ from core.agent.fake import ScriptedAgentChat
 from core.config.schema import EngagementConfig
 from core.guardrails.tools import guard_tools
 from core.llm.factory import get_chat_model
+from core.observability.handler import CALLBACK
 from core.toolgen.registry import build_tools, requires_approval
 
 PROMPT_VERSION = "agent-v1"  # bump when the prompt changes; evals record it (Day 3)
@@ -138,7 +139,9 @@ class AgentTurn:
 
 def run_config(cfg: EngagementConfig, thread_id: str) -> RunnableConfig:
     # One agent->tools round trip is 2 graph steps; max_steps bounds the loop so it can never spin forever.
-    return {"configurable": {"thread_id": thread_id}, "recursion_limit": 2 * cfg.llm.max_steps + 2}
+    # CALLBACK turns every model and tool call into a span, metrics and per-request counts (core/observability).
+    return {"configurable": {"thread_id": thread_id}, "recursion_limit": 2 * cfg.llm.max_steps + 2,
+            "callbacks": [CALLBACK]}
 
 
 def _steps(messages: list[BaseMessage]) -> list[dict[str, Any]]:

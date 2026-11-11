@@ -31,9 +31,31 @@ Parent: [Architecture](05-architecture.md) · Related: NFR-05–07, D-07, S-14
 - [ ] No long-lived GCP keys; GitHub → GCP via OIDC
 - [ ] Cloud Run service account: Secret Accessor + Cloud SQL Client only
 - [ ] Budget alerts at 50/90/100%
-- [ ] Logs exclude raw prompts in "customer mode" (config flag)
+- [x] Logs exclude raw prompts in "customer mode" (config flag `guardrails.log_prompts`; the request log never contains prompts)
+- [x] Admin endpoints protected by a bearer token from the environment, fail closed (DC-017)
 
-## 4. Responsible AI notes
+## 4. Admin endpoints (Sprint 01, DC-017)
+
+`POST /ingest` (re-runs ingestion: writes to `ops.*` and `kb.*`) and `POST /eval` (runs the golden set in the API process)
+are **admin endpoints**.
+
+| Control | How |
+|---|---|
+| Authentication | `Authorization: Bearer <ADMIN_TOKEN>`; the token comes from the environment (Secret Manager in the cloud), never from config files |
+| Fail closed | No `ADMIN_TOKEN` set on the server = both endpoints answer HTTP 503 and do nothing |
+| Timing-safe comparison | `hmac.compare_digest`, so a wrong token can't be discovered byte by byte |
+| Cost control | `/eval` refuses to run unless the server is in fake mode (HTTP 409); real-model evals are a CLI/CI job only |
+| Blast radius | `/ingest` only ingests the engagement the server is configured for; it is idempotent (unchanged files skipped) |
+| Not yet | No per-user identity or rate limit on admin calls; put them behind the platform's IAM (Cloud Run IAM / an internal ingress) in production |
+
+## 5. Observability and privacy (Sprint 01, DC-017)
+
+The request log line contains route, status, duration, model-call and token counts, and tool **names** only: no request
+body, prompt, answer or tool arguments. Spans carry the same kind of attributes (names, counts, sizes). Tool arguments
+stay in `agent.audit_log`, which is the auditor's record (note 13). Metrics labels are route templates and tool names,
+never thread ids or user text.
+
+## 6. Responsible AI notes
 - Users are told answers are AI-generated and shown sources.
 - Human approval for actions keeps a person accountable for changes.
 - Known limitations are listed in each engagement's handoff document.

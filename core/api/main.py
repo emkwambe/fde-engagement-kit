@@ -8,7 +8,13 @@ Endpoints
   POST /approvals/{thread_id}/approve   resume the paused thread and run the write
   POST /approvals/{thread_id}/reject    resume the paused thread without running it
   GET  /threads/{thread_id}/audit       everything recorded for one conversation
+  GET  /metrics                         Prometheus metrics (requests, latency, model calls, tokens, tools, approvals)
+  POST /ingest                          ADMIN: run ingestion for the configured engagement   (Bearer ADMIN_TOKEN)
+  POST /eval                            ADMIN: run the golden set, FAKE mode only           (Bearer ADMIN_TOKEN)
   GET  /                                a small chat page with Approve / Reject buttons (FR-14)
+
+Every request gets an OpenTelemetry span, a Prometheus observation and one JSON log line (core/observability).
+The response header X-Trace-Id is the same id stored in agent.audit_log.trace_id.
 
 Conversation state is checkpointed in Postgres (shared by every API process). If the database is
 unreachable at startup the API still starts, with in-memory checkpoints and no audit trail, and
@@ -17,17 +23,22 @@ unreachable at startup the API still starts, with in-memory checkpoints and no a
 
 from __future__ import annotations
 
+import hmac
+import logging
 import os
-from collections.abc import AsyncIterator, Iterator
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import Any, Literal
 
 import psycopg
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
+from opentelemetry.trace import SpanKind, Status, StatusCode
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
 from core.agent.checkpoint import CHECKPOINT_SCHEMA
@@ -37,6 +48,9 @@ from core.config import load_engagement
 from core.db.connection import connect, database_url
 from core.ingest.documents import embedding_signature, stored_signatures
 from core.llm.factory import get_chat_model, get_embeddings
+from core.observability import current_trace_id, request_scope, setup_tracing, tracer
+from core.observability import metrics as m
+from core.observability.logging import setup_logging
 
 UI_PAGE = Path(__file__).resolve().parents[2] / "ui" / "index.html"
 state: dict[str, Any] = {}
@@ -86,7 +100,41 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         pool.close()
 
 
-app = FastAPI(title="FDE Engagement Kit", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="FDE Engagement Kit", version="0.3.0", lifespan=lifespan)
+setup_tracing()
+request_log = setup_logging()
+QUIET_ROUTES = {"/health", "/metrics"}  # probes and scrapers call these every few seconds: count them, log at DEBUG
+
+
+@app.middleware("http")
+async def observe(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    """One span, one metrics observation and one JSON log line per request (D-16, NFR-08).
+    request_scope() gives the endpoint (and the agent's worker threads) a counter object for model and tool calls."""
+    start = time.perf_counter()
+    status = 500
+    with request_scope() as stats, tracer().start_as_current_span(f"HTTP {request.method}", kind=SpanKind.SERVER) as span:
+        trace_id = current_trace_id()
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            response.headers["X-Trace-Id"] = trace_id
+            return response
+        finally:
+            seconds = time.perf_counter() - start
+            route = getattr(request.scope.get("route"), "path", "unmatched")  # the template, never the raw path
+            span.update_name(f"{request.method} {route}")
+            span.set_attributes({"http.method": request.method, "http.route": route, "http.status_code": status,
+                                 "agent.model_calls": stats.model_calls, "agent.tool_calls": len(stats.tool_calls)})
+            if status >= 500:
+                span.set_status(Status(StatusCode.ERROR))
+            m.HTTP_REQUESTS.labels(request.method, route, str(status)).inc()
+            m.HTTP_SECONDS.labels(route).observe(seconds)
+            fields = {"trace_id": trace_id, "method": request.method, "route": route, "status": status,
+                      "duration_ms": round(seconds * 1000, 1), "model_calls": stats.model_calls,
+                      "tokens_in": stats.tokens_in, "tokens_out": stats.tokens_out, "tool_calls": stats.tool_calls}
+            if "thread_id" in request.path_params:
+                fields["thread_id"] = request.path_params["thread_id"]
+            request_log.log(logging.DEBUG if route in QUIET_ROUTES else logging.INFO, "request", extra={"fields": fields})
 
 
 # ----------------------------------------------------------------------------- request / response models
@@ -137,6 +185,26 @@ class AskResponse(BaseModel):
     answer: str
     citations: list[CitationOut]
     confidence: float
+
+
+class IngestRequest(BaseModel):
+    tables: bool = True
+    documents: bool = True
+
+
+class EvalRequest(BaseModel):
+    cases: list[str] = Field(default_factory=list, description="Case ids to run; empty = the whole golden set")
+
+
+def require_admin(authorization: str | None = Header(None)) -> None:
+    """Admin endpoints change data (/ingest) or burn CPU (/eval). Fail closed: no ADMIN_TOKEN set = disabled.
+    compare_digest takes the same time for every wrong token, so the token cannot be guessed byte by byte."""
+    token = os.environ.get("ADMIN_TOKEN", "")
+    if not token:
+        raise HTTPException(status_code=503, detail="Admin endpoints are disabled: set ADMIN_TOKEN on the server.")
+    if not hmac.compare_digest(authorization or "", f"Bearer {token}"):
+        raise HTTPException(status_code=401, detail="Missing or invalid admin bearer token",
+                            headers={"WWW-Authenticate": "Bearer"})
 
 
 # ----------------------------------------------------------------------------- endpoints
@@ -205,6 +273,46 @@ def ask_documents(req: ChatRequest) -> dict[str, Any]:
         result = answer_question(req.message, cfg=state["cfg"], conn=conn,
                                  chat=state["chat"], embeddings=state["embeddings"])
     return result.to_dict()
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.post("/ingest", dependencies=[Depends(require_admin)])
+def ingest(body: IngestRequest | None = None) -> dict[str, Any]:
+    """Re-run ingestion for the engagement this server is configured for (idempotent: unchanged files are skipped)."""
+    from core.ingest.run import run_ingestion
+
+    body = body or IngestRequest()
+    try:
+        return run_ingestion(state["cfg"], tables=body.tables, docs=body.documents)
+    except (FileNotFoundError, NotImplementedError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/eval", dependencies=[Depends(require_admin)])
+def run_eval(body: EvalRequest | None = None) -> dict[str, Any]:
+    """Run the golden set in this process, FAKE mode only: it checks the harness and wiring of a live server.
+    Real-model evals cost money and quota and can take minutes, so they stay a CLI / CI job (core.evals.run)."""
+    from core.config import resolve_path
+    from core.evals.golden import load_golden
+    from core.evals.run import PreflightError, build_service, preflight, run_cases, summarize
+
+    cfg = state["cfg"]
+    if cfg.llm.provider != "fake":
+        raise HTTPException(status_code=409, detail="Real-model evals run from the CLI or CI, not the API: "
+                                                    "uv run python -m core.evals.run")
+    wanted = set((body or EvalRequest()).cases)
+    cases = [c for c in load_golden(resolve_path(cfg.evals.golden_set)) if not wanted or c.id in wanted]
+    try:
+        preflight(cfg)
+    except PreflightError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    runs = run_cases(build_service(cfg), cases)
+    return {"summary": summarize(runs, cfg),
+            "cases": [{"id": r.score.case.id, "passed": r.score.passed, "reasons": r.score.reasons} for r in runs]}
 
 
 @app.get("/", include_in_schema=False)
