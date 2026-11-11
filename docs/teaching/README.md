@@ -69,6 +69,10 @@ Colors show on GitHub. In VS Code's Markdown preview (Ctrl+Shift+V) the boxes st
 | 14 | [Guardrails](14-guardrails.md) | PII redaction, prompt-injection filter, guarded tools, input blocking | 3 |
 | 15 | [Measuring quality](15-measuring-quality.md) | Golden-set evals, six checks, fake vs real, the gate, quota-aware resumable runs, the story of the first three real runs | 3 |
 | 16 | [Seeing what the agent did](16-observability.md) | Structured logs, Prometheus metrics, OpenTelemetry traces, one trace id across logs, traces and the audit log; admin endpoints | 3 |
+| 17 | [Shipping containers](17-containers.md) | Multi-stage non-root images, digest pins and OS updates, trivy, Compose stack with jobs and healthchecks, BUILD_SHA | 4 |
+| 18 | [The robot reviewer](18-ci-cd.md) | GitHub Actions: tests with pgvector, fake eval, gitleaks, image scan, Compose and kind smoke tests; manual real eval; keyless deploy | 4 |
+| 19 | [Running on Kubernetes](19-kubernetes.md) | Helm chart, init containers, ConfigMap/Secret, probes, hardened pods, kind | 4 |
+| 20 | [Infrastructure as code](20-infrastructure-as-code.md) | Terraform for Cloud Run, Cloud SQL, Secret Manager, service accounts, Workload Identity Federation; cost per hour; destroy | 4 |
 
 ## How to use these notes
 

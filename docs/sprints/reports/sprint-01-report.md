@@ -69,8 +69,8 @@ and latency of the results they reused. The real eval of demo-logistics is still
 | Phase | Status | Commits | Tests | Evidence |
 |---|---|---|---|---|
 | 0 Day 3 close-out | Done (real eval INCOMPLETE, see NEEDS HUMAN) | `27222c7` | 137 passed | `docs/teaching/15-measuring-quality.md`, `docs/16-deferred-ideas.md`, DC-016 |
-| 1 Observability + endpoints | Done | see Phase 1 checklist | 146 passed | `docs/teaching/16-observability.md`, `tests/day03/test_observability.py`, DC-017 |
-| 2 Day 4 platform | Not started | | | |
+| 1 Observability + endpoints | Done | `46fbc0b` | 146 passed | `docs/teaching/16-observability.md`, `tests/day03/test_observability.py`, DC-017 |
+| 2 Day 4 platform | Done locally + in CI; cloud deploy is NEEDS HUMAN | PR #1 (`af3f620`, `37a85e0`, docs commit) | 147 passed (laptop and CI) | CI run 43035141379 (green), notes 17-20, DC-018 |
 | 3a Kit generic | Not started | | | |
 | 3b Engagement #2 | Not started | | | |
 | 3c Docs and closure | Not started | | | |
@@ -108,6 +108,24 @@ and latency of the results they reused. The real eval of demo-logistics is still
       `test_ingest_endpoint_returns_the_load_counts`.
 - [x] Favicon: inline SVG in `ui/index.html`.
 - [x] Note 16, DC-017 (includes the formal D-11 Streamlit -> HTML console deviation), tests + lint green (gate output in the commit).
+
+### Phase 2
+
+- [x] Docker (D-12, NFR-11, NFR-12): `deploy/docker/api.Dockerfile`, `deploy/docker/mock-erp.Dockerfile`: multi-stage,
+      non-root (`fde-api:local runs as 10001:10001`), base pinned by digest, OS updates. `/health` -> `"version":{"app":"0.3.0","build_sha":"37a85e0"}`
+      (test `test_health_reports_which_build_is_running`). trivy: first run 7 CRITICAL (job 130570428801), after the fix 0 (job 130572443115).
+      trivy is not installed locally, so the scan runs in CI only (as the brief allows).
+- [x] `docker compose up` from a clean clone -> working stack: CI job `containers`, step "Compose smoke test": seed Exited,
+      migrate Exited, postgres/mock-erp/api Healthy, `/health` status ok with the CI commit, `/chat` tool-calling answer.
+      **Not run on the laptop** (free memory 2,253-2,874 MB < 3 GB floor); the CI runner is the clean machine. Timing: the whole
+      containers job, including image builds from scratch, took about 3 minutes (14:06:41 -> 14:09:34), well inside NFR-01's 15 minutes.
+- [x] Helm on kind: CI step "Helm install on kind": `STATUS: deployed`, `fde-api`, `fde-mock-erp`, `fde-postgres-0` all `1/1 Running`,
+      `kind health ok {'app': '0.3.0', 'build_sha': '37a85e0'}`. Locally: `helm lint` 0 failed, `helm template` 8 objects (note 19).
+- [x] CI green on GitHub: run 43035141379 <https://github.com/emkwambe/fde-engagement-kit/actions/runs/43035141379>
+      (test, secrets, containers all success). `eval-real.yml` (manual) and `deploy.yml` (manual, disabled) present.
+- [x] Terraform (D-15): `terraform fmt -check` exit 0, `terraform validate` "Success! The configuration is valid." Not applied.
+      Deploy and teardown sequence with cost per hour ($0.0373/h) in `docs/11-deployment-runbook.md` sections 4 and 7 and NEEDS HUMAN item 3.
+- [x] Notes 17-20, Day 4 status and journal, DC-018.
 
 ## 4. Evals
 
@@ -157,6 +175,13 @@ and latency of the results they reused. The real eval of demo-logistics is still
   note 16 on port 8001; did not stop the human's process (NEEDS HUMAN item 2). Phase 2 adds the build version to `/health`.
 - **F-06 FastAPI 0.162 emits its own spans** (`POST /chat` root, `fastapi.endpoint`, ...) once a tracer provider exists.
   Not planned, harmless: our spans nest inside. Documented in note 16.
+- **F-07 trivy blocked the first image build.** 7 CRITICAL CVEs (libssl3, gnutls, perl) in the digest-pinned Debian 12.13 base,
+  all with fixes published. Origin: pinning by digest freezes OS packages. Caught by: the CI trivy gate (as designed).
+  Fix: `apt-get upgrade` in the runtime stage; 0 CRITICAL on Debian 12.15.
+- **F-08 Laptop memory under the 3 GB floor.** 2,253 MB free after Phase 1 (Chrome and the Docker WSL VM). Image builds, Compose and
+  kind moved to CI (R-10's mitigation). Not a code problem, but the brief assumed local runs.
+- **F-09 Shell heredocs with quotes failed twice** in the executor's own tooling (bash "unexpected EOF"). No repo impact;
+  edits switched to script files.
 - **F-03 Logistics content in `core/`** beyond the brief's list (scoring `WRITE_TOOLS`, refusal text, doc tool description,
   system prompt). Handled in Phase 3a.
 
@@ -192,6 +217,13 @@ Other spend: $0 (no cloud resources created).
    Stop-Process -Id 15616      # only if the line above shows that PID; then restart with .	asks.ps1 api
    ```
    Expected: `/health` on port 8000 then shows `embeddings_match` (and, after Phase 2, `version`).
+
+3. **Deploy to GCP (optional, billable) and tear down.** Why: CLAUDE.md rule 5, the executor never creates cloud resources.
+   Cost while it exists: about $0.037 per hour ($0.90 per day), almost all Cloud SQL. Commands: `docs/11-deployment-runbook.md`
+   section 4.1 (one-time: state bucket, `terraform init`), 4.2 (registry, images, `plan`, `apply`, ingest job, smoke test),
+   4.3 (enable `deploy.yml` with `gh variable set ...`), section 7 (`terraform destroy`, then `gcloud sql instances list` must
+   show 0 items, and a billing check). Expected: `api_url` output and `/health` status ok with your commit. Send back:
+   the api_url, the `/health` JSON, and confirmation that destroy left no Cloud SQL instance.
 
 ## 10. Risks and open questions
 
