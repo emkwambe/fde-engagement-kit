@@ -90,11 +90,24 @@ stateDiagram-v2
 
 ## 5. Deployment views
 
-### 5.1 Local (Docker Compose)
-`api` · `ui` · `mock-erp` · `postgres (pgvector)` · optional `otel-collector` + `jaeger`
+### 5.1 Local (Docker Compose) - as built in Sprint 01 (DC-018)
 
-### 5.2 Kubernetes (kind) via Helm
-Deployments: api, ui, mock-erp · StatefulSet: postgres · ConfigMap: engagement config · Secret: API keys/DSN · Probes: `/health` · Service + port-forward or ingress.
+```mermaid
+flowchart LR
+  pg[(postgres<br/>pgvector)] --> migrate
+  seed[seed job<br/>CSV exports] -->|tables volume| migrate[migrate job<br/>schemas, role, ETL, documents]
+  migrate --> api[api<br/>FastAPI + console]
+  erp[mock-erp<br/>export baked in image] --> api
+  api --> pg
+```
+
+The console is served by the API at `/` (DC-014, DC-017: it replaces the planned Streamlit container). Traces go to the
+console (stdout) by default; set `OTEL_TRACES_EXPORTER=otlp` and `OTEL_EXPORTER_OTLP_ENDPOINT` to send them to a collector.
+
+### 5.2 Kubernetes (kind) via Helm - `deploy/helm/fde-kit`
+Deployments: `fde-api` (init containers `seed`, `migrate`), `fde-mock-erp` · StatefulSet: `fde-postgres` (kind only) ·
+ConfigMap: engagement.yaml (`--set-file engagementConfig`) · Secret: tokens and passwords (or `existingSecret`) ·
+Probes: `/health` · non-root, read-only root filesystem. Installed on kind in every CI run.
 
 ### 5.3 GCP (Terraform)
 
@@ -115,6 +128,13 @@ flowchart LR
   run1 --> openai[(OpenAI API)]
   run1 --> run2
 ```
+
+### 5.4 Observability (DC-017)
+
+One request = one OpenTelemetry trace: `HTTP` span (middleware) -> `agent.run` -> `agent.step agent|tools|approval` ->
+`llm.call` / `tool <name>`. The trace id is returned as `X-Trace-Id` and stored in `agent.audit_log.trace_id`.
+`GET /metrics` exposes request, model-call, token, tool-call, approval and guardrail counters for Prometheus. Each request
+writes one JSON log line with counts and tool names only.
 
 ## 6. Technology choices (summary)
 
@@ -143,7 +163,20 @@ flowchart LR
 
 What changes for a new cloud: Terraform module, object-store connector config, LLM provider config. What doesn't: core code, container image, Helm chart, evals.
 
-## 8. Repository layout
+## 8. Kit and engagement boundary (Sprint 01, DC-019..DC-029)
+
+| Concern | Kit (`core/`, same for every customer) | Engagement (`engagements/<name>/`) |
+|---|---|---|
+| Tables | ETL engine, column-type cleaners, FK checks | DDL (`sql/`), table specs and cleaning rules (YAML) |
+| Synthetic data | `core.ingest.seed` runner | `extensions/seed.py` (`generate(out_dir)`) |
+| Agent | LangGraph graph, approval interrupt, generic prompt | `prompts/agent-vN.txt` + `prompt_version` |
+| Offline testing | `ScriptedFake`, `GenericFakeChat` | `extensions/fake_agent.py` (`FakeAgent`) |
+| Tools | OpenAPI tool generator, read-only SQL tool | OpenAPI spec, operations to include, schema name |
+| Guardrails | PII and injection filters | which PII kinds, refusal wording |
+| Evals | runner, six checks, gate | golden set, threshold |
+| Console | page, `GET /engagement` | example questions |
+
+## 9. Repository layout
 
 ```
 fde-engagement-kit/
@@ -152,10 +185,10 @@ fde-engagement-kit/
 │   ├── agent/   guardrails/  evals/   api/  observability/
 ├── engagements/
 │   ├── _template/        # copy for each new customer
-│   ├── demo-logistics/   # engagement #1
-│   └── <engagement-2>/
-├── services/mock-erp/    # simulated enterprise system
-├── ui/                   # Streamlit
+│   ├── demo-logistics/   # engagement #1 (Northwind Logistics, fictional)
+│   └── coastline-hvac/   # engagement #2 (Coastline Climate Services, fictional)
+├── services/             # simulated customer systems: mock-erp (#1), mock-cmms (#2)
+├── ui/                   # one-file agent console, served by the API at /
 ├── deploy/
 │   ├── docker/  helm/  terraform/gcp/  sql/
 ├── .github/workflows/

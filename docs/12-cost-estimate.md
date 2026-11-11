@@ -92,14 +92,18 @@ Optional extras not included above: a custom domain (~$12/year), LangSmith paid 
 | Agent limits | `engagement.yaml` | `max_steps: 8`, max output tokens |
 | Eval scope | CI path filters | Evals run only when agent, retrieval, prompts or config change |
 
-## 7. Actuals (fill on Day 5)
+## 7. Actuals (filled on Day 5, 2026-11-11, from the eval reports)
 
 | Item | Expected | Actual | Variance | Note |
 |---|---|---|---|---|
-| O-1…O-7 OpenAI | $4.20 | | | |
-| G-1…G-3 Cloud SQL | $9.06 | | | |
-| G-4…G-11 Other GCP | $0.14 | | | |
-| **Total** | **$13.40** | | | |
+| O-1...O-7 OpenAI | $4.20 | under $0.01 | about -$4.19 | Chat (evals only): 0739 $0.0000 (all HTTP 400), 0748 $0.0051, 0811 $0.0000 (first call hit the quota), 0932 $0.0002, total $0.0053 from report headers. Embeddings (re-ingests for real runs, not metered by the runner): at most 70 chunks x 800 tokens x $0.02/1M = $0.0011 each, three re-ingests |
+| G-1...G-3 Cloud SQL | $9.06 | $0 | -$9.06 | Not deployed; Terraform validated only (CLAUDE.md rule 5) |
+| G-4...G-11 Other GCP | $0.14 | $0 | -$0.14 | Not deployed |
+| **Total** | **$13.40** | **under $0.01** | | Spend was limited by the 50-requests/day quota, not by budget |
+
+Why so far under: development and CI use fake models (FAKE_LLM=1), the expensive target model (gpt-6.1-terra) was never
+used, and the cloud stack was not applied. A full 27-case run on gpt-6-luna costs about $0.006-0.008 at the measured rate
+(about 2,000 input tokens per case); the planned O-4 assumed 8,000.
 
 ## 8. Customer-facing cost model (reusable)
 

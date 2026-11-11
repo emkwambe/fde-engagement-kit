@@ -59,10 +59,17 @@ The latest real report is `2026-11-11-0811-gpt-6-luna-cadb61d` (INCOMPLETE, 18/1
 
 ## 1. Summary
 
-**After Phase 0.** Day 3 part 2 (evals) is verified and committed with teaching note 15, docs/16 (deferred ideas A and B)
-and DC-016. A runner bug found at the start of the sprint is fixed with a test: resumed reports no longer claim the cost
-and latency of the results they reused. The real eval of demo-logistics is still INCOMPLETE (18/18 finished cases pass,
-9 not run because of the 50-requests-per-day quota); one resume attempt is planned near the end of the sprint.
+All five phases were worked in order and every commit was green. Delivered: Day 3 close-out (evals, note 15, deferred
+ideas, a runner fix for resumed reports), observability and the missing `/ingest`, `/eval`, `/metrics` endpoints
+(note 16), the Day 4 platform (hardened images, Compose stack, Helm chart, CI with security and container gates, a
+disabled keyless deploy workflow, validated Terraform; notes 17-20), a kit-generic refactor of eleven gaps (tag
+`kit-generic`), and engagement #2 (HVAC dispatch) with an empty `core/` diff since the tag (note 21), plus README,
+architecture, cost actuals and a closure report draft. Not finished, with the reason: the real-model eval of
+demo-logistics is still INCOMPLETE (19/19 finished cases pass, 8 not run: the 50-requests/day quota); the real eval of
+engagement #2 was not run (quota); the cloud deploy, demo video and cold rebuild are human steps. Overall status:
+**done to the limit of what the executor may do; the quality gate and the cloud milestone wait on NEEDS HUMAN items 1, 3, 4.**
+Tests: 136 at the start, 171 at the end. OpenAI spend this sprint: $0.0002 measured (+ at most $0.0011 for one real
+embedding re-ingest). GCP spend: $0.
 
 ## 2. Phase table
 
@@ -72,8 +79,8 @@ and latency of the results they reused. The real eval of demo-logistics is still
 | 1 Observability + endpoints | Done | `46fbc0b` | 146 passed | `docs/teaching/16-observability.md`, `tests/day03/test_observability.py`, DC-017 |
 | 2 Day 4 platform | Done locally + in CI; cloud deploy is NEEDS HUMAN | PR #1: `af3f620`, `57a3f59`, `f19e899` (CI tested `37a85e0` = GitHub's merge of the PR) | 147 passed (laptop and CI) | CI run 43035141379 (green), notes 17-20, DC-018 |
 | 3a Kit generic | Done | `9097578` (tag `kit-generic`) | 164 passed; master CI 43037679612 green | DC-019..DC-029, `tests/day05/test_kit_generic.py` |
-| 3b Engagement #2 | Done (real eval: NEEDS HUMAN) | see 3b checklist | 171 passed | note 21, DC-030, `tests/day05/test_coastline_hvac.py` |
-| 3c Docs and closure | Not started | | | |
+| 3b Engagement #2 | Done (real eval: NEEDS HUMAN) | `e69d0b6` | 171 passed; master CI 43039120762 | note 21, DC-030, `tests/day05/test_coastline_hvac.py` |
+| 3c Docs and closure | Done (human items listed) | final commit (this report) | 171 passed | README, `docs/15-closure-report.md`, `docs/12` section 7, `docs/03` After draft |
 
 ## 3. Definition of Done checklists
 
@@ -144,9 +151,35 @@ and latency of the results they reused. The real eval of demo-logistics is still
 - [x] Golden set 27 cases, same category minimums (`test_golden_set_meets_the_test_strategy_minimums` for coastline-hvac).
 - [x] End to end: ingest (30/8/48/120 rows, 11 docs, 35 chunks), chat, approval (paused `createDispatch` with T-07 / $75,
       DSP-0001 only after approval), fake eval 19/27 via `/eval` (red team 5/5). Test `test_a_dispatch_pauses_for_approval_and_runs_only_after_it`.
-- [x] Zero `core/` changes since `kit-generic` (section 5).
+      CI run 43039120762 (master, `e69d0b6`) ran both fake evals on a clean runner: coastline-hvac 19/27, demo-logistics 15/27, 171 tests passed.
+- [x] Zero `core/` changes since `kit-generic` (section 5). After the 3b commit `e69d0b6`:
+      `git diff --stat kit-generic..HEAD -- core/` printed nothing (`(lines: 0)`); the whole diff since the tag:
+      `31 files changed, 1660 insertions(+), 5 deletions(-)`, none in `core/`.
 - [ ] Real eval of engagement #2: **not run** (quota; NEEDS HUMAN item 4).
 - [x] Note 21 with real timings and the zero-diff proof.
+
+### Phase 3c
+
+- [x] README: what it is, quick start in PowerShell, Mermaid architecture, links to notes and the latest real report.
+- [x] Architecture updated (`docs/05`: Compose diagram as built, Helm view, observability, kit/engagement boundary table).
+- [x] Runbook re-checked: sections 2, 3, 4, 7 rewritten to match the built system (Phase 2); sections 2-3 are exactly what CI runs.
+- [x] Cost actuals in `docs/12-cost-estimate.md` section 7 (from report headers; embeddings bounded, not metered).
+- [x] Skills matrix After column drafted as "evidence N (draft)", clearly not a judgement of the author's skill.
+- [x] `docs/15-closure-report.md`: objectives vs results, FR/NFR coverage table (met / partly / not met), failures and
+      lessons, deferred ideas, next steps.
+- [ ] Demo video, cold rebuild, cloud deploy/destroy and billing check, enabling the deploy workflow, confirming the
+      skills matrix: NEEDS HUMAN items 3, 5-8.
+
+### Global Definition of Done (brief section 7)
+
+- [x] Every phase's DoD met or listed as partly / NEEDS HUMAN with the reason (sections 3, 9).
+- [x] `uv run pytest -q` green (171 passed), `.\tasks.ps1 lint` clean, CI green on master (runs 43037679612, 43039120762).
+- [ ] Real eval for demo-logistics complete: **no** (INCOMPLETE, 8 not run); gate result stated honestly (not measurable
+      yet); every failure has a root cause (section 4); the cost of every real run recorded (section 8).
+- [x] Engagement #2 delivered with a provably empty `core/` diff since `kit-generic`.
+- [x] Teaching notes 15-21 exist, follow the template, every RESULT is captured output (CI-sourced results say so).
+- [x] Decision log (DC-016..DC-030), status reports and journals for Days 3-5.
+- [x] This report complete and pushed.
 
 ## 4. Evals
 
@@ -157,15 +190,24 @@ and latency of the results they reused. The real eval of demo-logistics is still
 | 2026-11-11-0739-gpt-6-luna-cadb61d | openai/gpt-6-luna | agent-v1 | 27 / 2 | 7% | 40% | FAIL | $0.0000 | 0.25 s | every call HTTP 400 `temperature` |
 | 2026-11-11-0748-gpt-6-luna-cadb61d | openai/gpt-6-luna | agent-v1 | 27 / 18 | 67% | 40% | FAIL | $0.0051 | 15.18 s | 429 daily quota after 18 cases; crashes counted as failures (old runner) |
 | 2026-11-11-0811-gpt-6-luna-cadb61d | openai/gpt-6-luna | agent-v1 | 18 / 18 (9 not run) | 100% of finished | 100% of finished | INCOMPLETE | **$0 actual** (report says $0.0045: F-01) | n/a (report says 16.55 s: F-01) | first call hit the quota; 18 results reused |
-| fake harness (not committed, `*-fake-*`) | fake | agent-v1 | 27 / 15 | 56% | 100% | not enforced | n/a | 0.1 s | checks the harness only |
+| **2026-11-11-0932-gpt-6-luna-e69d0b6** (Sprint 01) | openai/gpt-6-luna | agent-v1 (sha 537c08f4c028) | 19 / 19 (8 not run) | 100% of finished | 100% of finished (2/2) | INCOMPLETE | **$0.0002** this run (+ $0.0045 carried over) | 8.18 s (1 case) | q-018 re-run passes; 429 after 1 case |
+| fake harness (not committed, `*-fake-*`) | fake | agent-v1 | 27 / 15 | 56% | 100% | not enforced | n/a | 0.1 s | checks the harness only; same before and after 3a |
+
+### coastline-hvac
+
+| Run | Model | Prompt | Cases ran / passed | Overall | Safety | Gate | Cost | Note |
+|---|---|---|---|---|---|---|---|---|
+| fake via CLI, 09:25 (not committed) | fake | hvac-agent-v1 | 27 / 18 | 67% | 100% | not enforced | n/a | q-016 CRASH = bug in the engagement's fake script (KeyError on a 404 body), fixed in its extensions file |
+| fake via `POST /eval`, 09:27 | fake | hvac-agent-v1 | 27 / 19 | 70% | 100% | not enforced | n/a | after the fake-script fix |
+| real | - | - | not run | - | - | - | - | quota: NEEDS HUMAN item 4 |
 
 ### Failing real cases and root causes
 
 | Case | Report | Root cause | Category of cause | Fix or limitation |
 |---|---|---|---|---|
 | all 25 non-blocked cases | 0739 | `gpt-6-luna` rejects the `temperature` parameter (HTTP 400) | Model/provider limit + our config default | `llm.temperature` opt-in (DC-016); test `test_temperature_is_not_sent_unless_configured` |
-| q-018 | 0748 | Answer was correct ("wasn't found") but (a) shown as `str(list)` of content blocks and (b) the check required the exact words "not found" | Agent bug (a) + golden case too narrow (b) | (a) `AIMessage.text` in `_turn()`/`answer_question()`; (b) alternatives with evidence in `notes`. Re-run pending (quota) |
-| q-019..q-027 (8 cases) | 0748 | HTTP 429 daily quota; scored as CRASH by the runner of that time | Provider quota (not an agent failure) | Quota-aware runner (NOT RUN + resume). Not yet re-run |
+| q-018 | 0748 | Answer was correct ("wasn't found") but (a) shown as `str(list)` of content blocks and (b) the check required the exact words "not found" | Agent bug (a) + golden case too narrow (b) | (a) `AIMessage.text` in `_turn()`/`answer_question()`; (b) alternatives with evidence in `notes`. **Verified in 0932: passes; stored answer is plain text: 'Shipment SHP-0000 wasn't found, so I can't confirm its status. ...'** |
+| q-019..q-027 (8 cases) | 0748, 0811, 0932 | HTTP 429 daily quota (0748 scored them as CRASH; the new runner marks NOT RUN) | Provider quota (not an agent failure) | Not yet run with the real model: NEEDS HUMAN item 1. No root cause can be claimed for cases that never ran |
 
 ## 5. Kit-genericity proof
 
@@ -204,7 +246,17 @@ After the 3b commit: see the Phase 3b checklist (the same command over `kit-gene
 - DC-016 (Phase 0): see the decision log.
 - Deviation: resumed from the 0811 report instead of 0748 (sponsor instruction; 0811 contains the same 18 results).
 - Deviation: the real-eval resume was not attempted in Phase 0 because the quota had run out 20 minutes earlier;
-  it is attempted once at the end of the sprint instead (no retry loop).
+  it was attempted once later (09:31, report 0932: one case ran, then 429). No retry loop.
+- DC-017 observability + admin endpoints; formal record that the HTML console replaces the Streamlit UI (D-11).
+- DC-018 Day 4 platform. Deviations inside it: image builds, Compose and kind verified in CI, not on the laptop
+  (memory under the 3 GB floor); trivy only in CI (not installed locally); Day 4 went through draft PR #1, so its first
+  two commits carry no note (notes 17-20 are in the commit that completed the part, before the fast-forward to master).
+- DC-019..DC-029: one row per kit gap (section 5). Deviation: no separate teaching note for 3a; it is taught in note 21.
+- DC-030 engagement #2. Deviation: real eval of engagement #2 not run (quota).
+- Deviation: Phase 3b content (discovery doc and policy documents) was written while CI for Phase 2 was running, before
+  3a was finished; nothing of 3b was committed before the `kit-generic` tag, so the zero-diff proof is unaffected.
+- Deviation: one Phase 2 commit (`57a3f59`, Dockerfile-only) was pushed without re-running the local gate; it changed no
+  Python, and CI ran the full test suite on it (green).
 
 ## 7. Findings
 
@@ -245,7 +297,9 @@ After the 3b commit: see the Phase 3b checklist (the same command over `kit-gene
 | 0739 (before sprint) | $0.0000 | 25 calls, all rejected with HTTP 400 | report |
 | 0748 (before sprint) | $0.0051 | not recorded by the runner; the 50/day quota was reached | report |
 | 0811 (before sprint) | $0.0000 | 1 (HTTP 429) | report case list; header figure is F-01 |
-| Sprint 01 so far | $0.0000 | 0 | no real run yet |
+| 0932 (Sprint 01) | $0.0002 | 1 case ran (q-018: 1,717 tokens in / 53 out), then HTTP 429 | report header "This run" line |
+| Real embedding re-ingest for 0932 (Sprint 01) | at most $0.0011 | 1 batch per document (20 documents, 70 chunks) | bound computed: 70 x 800 tokens x $0.02/1M |
+| **Sprint 01 total** | **$0.0002 measured, at most $0.0013 with embeddings** | | well under the $1.00 sprint budget |
 
 Other spend: $0 (no cloud resources created).
 
@@ -256,12 +310,13 @@ Other spend: $0 (no cloud resources created).
    ```powershell
    $env:FAKE_LLM = '0'
    uv run python -m core.ingest.run --docs-only
-   uv run python -m core.evals.run --resume engagements/demo-logistics/evals/reports/2026-11-11-0811-gpt-6-luna-cadb61d.json
+   uv run python -m core.evals.run --resume engagements/demo-logistics/evals/reports/2026-11-11-0932-gpt-6-luna-e69d0b6.json
    Remove-Item Env:FAKE_LLM
    uv run python -m core.ingest.run --docs-only    # restores fake vectors (FAKE_LLM=1 from .env)
    ```
    Expected: a new report; if the quota stops it again, resume from the NEWEST report it printed. Send back the report file name.
-   (This item is updated at the end of the sprint with the newest report to resume from.)
+   Updated at the end of the sprint: resume from **0932** (it holds the 19 finished results; 0811 holds only 18).
+   8 cases remain, about 25 requests, so plan for one day of quota.
 
 2. **Stop the stale API on port 8000.** Why: it runs code from before Sprint 01 (F-05), so anything you try on port 8000
    shows old behaviour. It is your process, so I did not stop it.
@@ -293,6 +348,29 @@ Other spend: $0 (no cloud resources created).
    Expected: a report in `engagements/coastline-hvac/evals/reports/`; cost about $0.005 on gpt-6-luna. Send back the report
    file names; failing cases get a root cause like section 4.
 
+5. **Demo video (D-21, at most 5 minutes).** Why: needs the author's voice and screen. Suggested flow: `.\tasks.ps1 demo`,
+   the console answering a policy question with citations, a credit ticket pausing for approval and being approved,
+   `/metrics`, then engagement #2's dispatch. Send back the video link for the README.
+6. **Cold rebuild exercise (charter section 7).** Why: it measures the author's skill, which the executor cannot do.
+   Pick one component (for example `core/retrieval/search.py` or the approval node in `core/agent/graph.py`), rebuild it
+   without notes in at most 45 minutes, run `uv run pytest -q tests/day01` (or `tests/day02/test_agent.py`). Send back
+   the component, the time and what was hard.
+7. **Confirm the skills matrix After column** (`docs/03-skills-matrix.md`). Why: the drafted values describe the
+   repository's evidence, not your skill. Replace each "evidence N (draft)" with your own level; fill Before from memory if
+   you can. Send back: done, and SC-01's percentage.
+8. **Sign the closure report** (`docs/15-closure-report.md` section 8) after items 1, 3, 4 and record your hours in
+   section 5b and in the status reports.
+
 ## 10. Risks and open questions
 
 - R-12 provider quota (new). A higher OpenAI tier would let one eval finish in one day; sponsor decision.
+- NFR-04 latency: real cases took 15-17 s at p95 per case locally (several model calls each). The 8 s cloud target is
+  likely to fail with this model and design; options are a faster model, fewer steps, or a changed target. Sponsor decision.
+- The quality gate has never been measured on a complete run. 19/19 finished cases is encouraging but the unrun cases
+  include all three multi-step cases and two write cases with capped credits, the hardest ones.
+- Engagement #2's prompt and golden set have never seen a real model; expect some failures and golden-case reviews.
+- One shared `agent_ro` role can read every engagement's schema in a shared database (DC-023). Fine for a demo; a real
+  deployment uses one database per customer.
+- Engagement-owned Python (seed and fake scripts) runs inside the kit's process. Today it is our own code; with real
+  customers it needs the same review as core code. Open question for the sponsor.
+- Missing Day 2 status and journal (noted in Orientation); not back-filled.

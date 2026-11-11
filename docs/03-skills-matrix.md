@@ -18,32 +18,37 @@ Target for this sprint is **3** for everything and **4** for the skills central 
 
 Fill **Before** on Day 0 and **After** on Day 5. Be honest; the gap is the point.
 
+> **After column: DRAFT by Claude (2026-11-11), for the author to confirm or change.** Each value says what the
+> repository can demonstrate (the evidence artifact exists and works), written as `evidence N`. It is NOT a
+> judgement of the author's own skill: only the author can rate that, ideally after the cold rebuild and the
+> mock interview. The Before column was not filled on Day 0.
+
 | ID | Skill | Learning objective (I can…) | Evidence artifact | Day | Target | Before | After |
 |---|---|---|---|---|---|---|---|
-| S-01 | Python service engineering | structure a typed, tested Python package with FastAPI and Pydantic settings | `core/api`, `core/config` | 1 | 4 | | |
-| S-02 | REST API design | design endpoints, error models, health checks, and OpenAPI docs | `/docs` page | 1 | 3 | | |
-| S-03 | ETL / data pipelines | build an idempotent extract-clean-load job with logging and counts | `core/ingest/etl.py` | 1 | 3 | | |
-| S-04 | SQL & PostgreSQL | model tables, write analytical queries, create read-only roles | `deploy/sql/`, SQL tool | 1–2 | 3 | | |
-| S-05 | Embeddings & chunking | choose chunk size/overlap, embed, explain cosine similarity and dimension trade-offs | ingestion config + ADR | 1 | 4 | | |
-| S-06 | Vector DBs & semantic search | use pgvector (HNSW index), compare with FAISS/Chroma/Pinecone, add hybrid search | `core/retrieval`, ADR-002 | 1 | 4 | | |
-| S-07 | RAG | build retrieval → prompt → cited answer, diagnose retrieval vs. generation failures | eval report | 1–3 | 4 | | |
-| S-08 | Prompt engineering | write system prompts with structured outputs and citation rules; version prompts | `core/agent/prompts/` | 2 | 3 | | |
-| S-09 | LangChain | use chat models, tools, retrievers, provider abstraction | `core/agent` | 2 | 3 | | |
-| S-10 | LangGraph & agentic workflows | build a state graph with conditional edges, checkpoints, and human-in-the-loop interrupts | `core/agent/graph.py` | 2 | 4 | | |
-| S-11 | Tool calling & enterprise integration | generate tools from OpenAPI, call external APIs safely, handle errors and retries | `core/toolgen` | 2 | 4 | | |
-| S-12 | LLM platforms | call OpenAI; switch to Anthropic / Azure OpenAI by config; understand rate limits and costs | provider config | 2 | 3 | | |
-| S-13 | AI evaluation | build golden sets; measure hit-rate, tool accuracy, answer correctness; gate CI | `core/evals` | 3 | 4 | | |
-| S-14 | AI security | apply PII redaction, read-only DB access, prompt-injection defenses, approval gates | `core/guardrails`, threat model | 3 | 3 | | |
-| S-15 | Observability | emit structured logs, traces, and metrics; read a trace to debug an agent | trace screenshot | 3 | 3 | | |
-| S-16 | Docker | write multi-stage, non-root images; compose multi-service stacks | `deploy/docker` | 4 | 4 | | |
-| S-17 | Kubernetes | write a Helm chart with probes, config, secrets; debug pods on kind | `deploy/helm` | 4 | 3 | | |
-| S-18 | CI/CD | build a GitHub Actions pipeline with quality and eval gates and deploy stages | `.github/workflows` | 4 | 3 | | |
-| S-19 | Infrastructure as code | provision Cloud Run, Cloud SQL, Secret Manager, IAM with Terraform; manage state | `deploy/terraform/gcp` | 4 | 3 | | |
-| S-20 | GCP (primary cloud) | deploy and operate a containerized service with managed Postgres and least-privilege IAM | live URL | 4 | 3 | | |
-| S-21 | AWS / Azure awareness | map each GCP component to its AWS and Azure equivalent | [05-architecture §7](05-architecture.md#7-cloud-portability-map) | 4 | 2 | | |
-| S-22 | Customer discovery & communication | run discovery, write a problem statement, agree success metrics | `engagements/*/discovery.md` | 0, 5 | 4 | | |
-| S-23 | Solution design & documentation | write architecture docs, ADRs, runbooks | `docs/` | all | 4 | | |
-| S-24 | Delivery management | plan, track risks, control scope, close out | charter, risk register, closure | all | 3 | | |
+| S-01 | Python service engineering | structure a typed, tested Python package with FastAPI and Pydantic settings | `core/api`, `core/config` | 1 | 4 | | evidence 4: typed FastAPI + Pydantic service, 171 tests (draft) |
+| S-02 | REST API design | design endpoints, error models, health checks, and OpenAPI docs | `/docs` page | 1 | 3 | | evidence 3: OpenAPI at /docs, admin auth, 409/422 errors (draft) |
+| S-03 | ETL / data pipelines | build an idempotent extract-clean-load job with logging and counts | `core/ingest/etl.py` | 1 | 3 | | evidence 3: config-driven ETL, counted rejects, idempotent (draft) |
+| S-04 | SQL & PostgreSQL | model tables, write analytical queries, create read-only roles | `deploy/sql/`, SQL tool | 1–2 | 3 | | evidence 3: per-schema DDL, views, read-only role (draft) |
+| S-05 | Embeddings & chunking | choose chunk size/overlap, embed, explain cosine similarity and dimension trade-offs | ingestion config + ADR | 1 | 4 | | evidence 3: chunking + embedding signature (draft) |
+| S-06 | Vector DBs & semantic search | use pgvector (HNSW index), compare with FAISS/Chroma/Pinecone, add hybrid search | `core/retrieval`, ADR-002 | 1 | 4 | | evidence 3: pgvector HNSW + hybrid RRF (draft) |
+| S-07 | RAG | build retrieval → prompt → cited answer, diagnose retrieval vs. generation failures | eval report | 1–3 | 4 | | evidence 3: cited answers; real eval RAG 8/8 (draft) |
+| S-08 | Prompt engineering | write system prompts with structured outputs and citation rules; version prompts | `core/agent/prompts/` | 2 | 3 | | evidence 3: versioned prompts with sha (draft) |
+| S-09 | LangChain | use chat models, tools, retrievers, provider abstraction | `core/agent` | 2 | 3 | | evidence 3: chat models, tools, callbacks (draft) |
+| S-10 | LangGraph & agentic workflows | build a state graph with conditional edges, checkpoints, and human-in-the-loop interrupts | `core/agent/graph.py` | 2 | 4 | | evidence 4: graph, interrupt, Postgres checkpoints (draft) |
+| S-11 | Tool calling & enterprise integration | generate tools from OpenAPI, call external APIs safely, handle errors and retries | `core/toolgen` | 2 | 4 | | evidence 4: tools from two OpenAPI specs (draft) |
+| S-12 | LLM platforms | call OpenAI; switch to Anthropic / Azure OpenAI by config; understand rate limits and costs | provider config | 2 | 3 | | evidence 2: OpenAI only; quota and parameter lessons (draft) |
+| S-13 | AI evaluation | build golden sets; measure hit-rate, tool accuracy, answer correctness; gate CI | `core/evals` | 3 | 4 | | evidence 4: golden sets, six checks, resumable runner (draft) |
+| S-14 | AI security | apply PII redaction, read-only DB access, prompt-injection defenses, approval gates | `core/guardrails`, threat model | 3 | 3 | | evidence 3: guardrails + red team (draft) |
+| S-15 | Observability | emit structured logs, traces, and metrics; read a trace to debug an agent | trace screenshot | 3 | 3 | | evidence 3: one trace id across logs/traces/audit (draft) |
+| S-16 | Docker | write multi-stage, non-root images; compose multi-service stacks | `deploy/docker` | 4 | 4 | | evidence 3: multi-stage non-root, trivy gate (draft) |
+| S-17 | Kubernetes | write a Helm chart with probes, config, secrets; debug pods on kind | `deploy/helm` | 4 | 3 | | evidence 3: Helm chart on kind in CI (draft) |
+| S-18 | CI/CD | build a GitHub Actions pipeline with quality and eval gates and deploy stages | `.github/workflows` | 4 | 3 | | evidence 3: CI, manual eval, keyless deploy (disabled) (draft) |
+| S-19 | Infrastructure as code | provision Cloud Run, Cloud SQL, Secret Manager, IAM with Terraform; manage state | `deploy/terraform/gcp` | 4 | 3 | | evidence 2: validated, never applied (draft) |
+| S-20 | GCP (primary cloud) | deploy and operate a containerized service with managed Postgres and least-privilege IAM | live URL | 4 | 3 | | evidence 1: not deployed (draft) |
+| S-21 | AWS / Azure awareness | map each GCP component to its AWS and Azure equivalent | [05-architecture §7](05-architecture.md#7-cloud-portability-map) | 4 | 2 | | evidence 2: portability map (draft) |
+| S-22 | Customer discovery & communication | run discovery, write a problem statement, agree success metrics | `engagements/*/discovery.md` | 0, 5 | 4 | | evidence 3: two discovery docs (draft) |
+| S-23 | Solution design & documentation | write architecture docs, ADRs, runbooks | `docs/` | all | 4 | | evidence 4: docs, ADRs, runbook, 22 notes (draft) |
+| S-24 | Delivery management | plan, track risks, control scope, close out | charter, risk register, closure | all | 3 | | evidence 3: charter, risks, DC log, sprint report (draft) |
 
 ## 3. Learning resources (official docs first)
 
