@@ -1,7 +1,41 @@
 name: fde-kit
 
+# The whole demo stack (D-12, NFR-01):   .\tasks.ps1 demo        (= docker compose up -d --build --wait api)
+# Database only, for local development:  .\tasks.ps1 up          (= docker compose up -d --wait postgres)
+#
+# Start order, enforced by depends_on conditions:
+#   postgres (healthy) ---------------------------------+
+#   seed (job: CSV exports into the shared "tables" volume) --> migrate (job: schemas, role, ETL, documents) --+
+#   mock-erp (healthy; its shipment export is baked into its image at build time) -----------------------------+--> api
+# One image (fde-api) runs the api AND the seed/migrate jobs: same code everywhere (NFR-11).
+# `--wait api` waits for the api to be healthy; the one-shot jobs only need to have finished successfully.
+# Never run `docker compose config` without --no-interpolate here: it prints resolved values, including keys from .env.
+
+x-api-env: &api-env
+  ENGAGEMENT: ${ENGAGEMENT:-demo-logistics}
+  FAKE_LLM: ${FAKE_LLM:-1}
+  LLM_MODEL: ${LLM_MODEL:-gpt-6-luna}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  DATABASE_URL: postgresql://fde:fde@postgres:5432/fde
+  AGENT_RO_PASSWORD: ${AGENT_RO_PASSWORD:-agent_ro}
+  AGENT_RO_DATABASE_URL: postgresql://agent_ro:${AGENT_RO_PASSWORD:-agent_ro}@postgres:5432/fde
+  ERP_API_URL: http://mock-erp:8100
+  ERP_API_TOKEN: ${ERP_API_TOKEN:-dev-token}
+  ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+  OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-console}
+
+x-api-image: &api-image
+  image: fde-api:${IMAGE_TAG:-local}
+  build:
+    context: .
+    dockerfile: deploy/docker/api.Dockerfile
+    args:
+      BUILD_SHA: ${BUILD_SHA:-dev}
+
 services:
   postgres:
+    # Tag kept as on Day 1, so the existing local database container is not recreated. Our own images pin their
+    # base images by digest (deploy/docker/).
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: fde
@@ -17,8 +51,46 @@ services:
       timeout: 3s
       retries: 20
 
-  # Day 1: the API runs on your machine with `uv run uvicorn core.api.main:app --reload`.
-  # Day 4 adds api, mock-erp and ui containers here.
+  seed:
+    <<: *api-image
+    command: ["python", "-m", "core.ingest.seed", "--engagement", "${ENGAGEMENT:-demo-logistics}"]
+    environment: *api-env
+    volumes:
+      - tables:/app/engagements/${ENGAGEMENT:-demo-logistics}/data/tables
+    restart: "no"
+
+  migrate:
+    <<: *api-image
+    command: ["sh", "-c", "python -m core.db.migrate && python -m core.ingest.run"]
+    environment: *api-env
+    volumes:
+      - tables:/app/engagements/${ENGAGEMENT:-demo-logistics}/data/tables:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      seed: { condition: service_completed_successfully }
+    restart: "no"
+
+  mock-erp:
+    image: fde-mock-erp:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: deploy/docker/mock-erp.Dockerfile
+      args:
+        BUILD_SHA: ${BUILD_SHA:-dev}
+    environment:
+      ERP_API_TOKEN: ${ERP_API_TOKEN:-dev-token}
+    ports:
+      - "${ERP_HOST_PORT:-8100}:8100"
+
+  api:
+    <<: *api-image
+    environment: *api-env
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      mock-erp: { condition: service_healthy }
 
 volumes:
   pgdata:
+  tables:

@@ -1,0 +1,47 @@
+{{- if .Values.postgres.enabled }}
+# Postgres + pgvector for kind ONLY. A StatefulSet (not a Deployment) because a database needs a stable name and its
+# own disk that survives pod restarts. In the cloud this is Cloud SQL (deploy/terraform/gcp), so it is switched off there.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgres
+  labels: {{- include "fde.labels" . | nindent 4 }}
+spec:
+  selector: { app: {{ .Release.Name }}-postgres }
+  ports: [{ name: pg, port: 5432, targetPort: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-postgres
+  labels: {{- include "fde.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: {{ .Release.Name }}-postgres }
+  template:
+    metadata:
+      labels: { app: {{ .Release.Name }}-postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          env:
+            - { name: POSTGRES_USER, value: fde }
+            - { name: POSTGRES_DB, value: fde }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "fde.secretName" . }}, key: postgres-password } }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "fde", "-d", "fde"] }
+            periodSeconds: 3
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: {{ .Values.postgres.storage }} } }
+{{- end }}

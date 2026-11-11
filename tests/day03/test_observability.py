@@ -65,6 +65,12 @@ def test_metrics_endpoint_serves_prometheus_text_and_counts_requests():
     assert _metric(resp.text, "fde_http_requests_total", method="GET", route="/health", status="200") == before + 1
 
 
+def test_health_reports_which_build_is_running(monkeypatch):
+    monkeypatch.setenv("BUILD_SHA", "abc1234")
+    with TestClient(api.app) as c:
+        assert c.get("/health").json()["version"] == {"app": api.app.version, "build_sha": "abc1234"}
+
+
 def test_every_response_carries_a_trace_id():
     with TestClient(api.app) as c:
         trace_id = c.get("/health").headers["X-Trace-Id"]

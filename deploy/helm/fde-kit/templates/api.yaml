@@ -1,0 +1,85 @@
+# The agent API (also serves the console at /). Two init containers run first, in order:
+#   seed     writes the engagement's CSV exports into an emptyDir
+#   migrate  waits for the database, applies migrations, creates the read-only role, loads tables and documents
+# Init containers must finish before the API starts, so the API never serves an empty database.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-api
+  labels: {{- include "fde.labels" . | nindent 4 }}
+spec:
+  selector: { app: {{ .Release.Name }}-api }
+  ports: [{ name: http, port: {{ .Values.api.port }}, targetPort: {{ .Values.api.port }} }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-api
+  labels: {{- include "fde.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels: { app: {{ .Release.Name }}-api }
+  template:
+    metadata:
+      labels: { app: {{ .Release.Name }}-api }
+      annotations:
+        # Restart pods when the engagement config changes (a ConfigMap change alone does not restart anything).
+        checksum/config: {{ .Values.engagementConfig | sha256sum }}
+    spec:
+      securityContext: {{- include "fde.podSecurity" . | nindent 8 }}
+      initContainers:
+        - name: seed
+          image: "{{ .Values.image.api.repository }}:{{ .Values.image.api.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "core.ingest.seed", "--engagement", {{ .Values.engagement | quote }}]
+          env: {{- include "fde.apiEnv" . | nindent 12 }}
+          securityContext: {{- include "fde.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - { name: tables, mountPath: "/app/engagements/{{ .Values.engagement }}/data/tables" }
+            {{- include "fde.configVolume" . | nindent 12 }}
+        - name: migrate
+          image: "{{ .Values.image.api.repository }}:{{ .Values.image.api.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              until python -c "import os, psycopg; psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=3).close()"; do
+                echo "waiting for the database..."; sleep 3
+              done
+              python -m core.db.migrate && python -m core.ingest.run
+          env: {{- include "fde.apiEnv" . | nindent 12 }}
+          securityContext: {{- include "fde.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - { name: tables, mountPath: "/app/engagements/{{ .Values.engagement }}/data/tables", readOnly: true }
+            {{- include "fde.configVolume" . | nindent 12 }}
+      containers:
+        - name: api
+          image: "{{ .Values.image.api.repository }}:{{ .Values.image.api.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env: {{- include "fde.apiEnv" . | nindent 12 }}
+          ports: [{ containerPort: {{ .Values.api.port }} }]
+          # /health always answers 200 while the process is alive (status inside says ok/degraded), so it suits both:
+          # readiness = may receive traffic; liveness = restart me if I stop answering.
+          readinessProbe:
+            httpGet: { path: /health, port: {{ .Values.api.port }} }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: {{ .Values.api.port }} }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext: {{- include "fde.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            {{- include "fde.configVolume" . | nindent 12 }}
+      volumes:
+        - { name: tables, emptyDir: {} }
+        - { name: tmp, emptyDir: {} }
+        {{- if .Values.engagementConfig }}
+        - name: engagement-config
+          configMap: { name: {{ .Release.Name }}-engagement }
+        {{- end }}

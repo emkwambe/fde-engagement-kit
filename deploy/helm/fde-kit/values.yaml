@@ -1,0 +1,54 @@
+# Values for the fde-kit chart. Defaults target a local kind cluster with fake models (no API key, no cost).
+#
+#   helm upgrade --install fde deploy/helm/fde-kit `
+#     --set engagement=demo-logistics `
+#     --set-file engagementConfig=engagements/demo-logistics/engagement.yaml
+
+# Which engagement folder (inside the image) this release serves. A new customer = a new value here, not new code.
+engagement: demo-logistics
+
+# Optional: the engagement.yaml content. When set, it is stored in a ConfigMap and mounted over the file baked into
+# the image, so config can change without rebuilding the image. Empty = use the image's copy.
+engagementConfig: ""
+
+image:
+  api:
+    repository: fde-api
+    tag: local
+  mockErp:
+    repository: fde-mock-erp
+    tag: local
+  pullPolicy: IfNotPresent   # kind: images are loaded with `kind load docker-image`, never pulled
+
+models:
+  fakeLlm: "1"               # "0" = real OpenAI models (needs secrets.openaiApiKey)
+  llmModel: gpt-6-luna
+
+# Secret values. For kind these demo defaults are fine; anywhere else, create the Secret yourself and set existingSecret.
+existingSecret: ""
+secrets:
+  postgresPassword: fde
+  agentRoPassword: agent_ro
+  erpApiToken: dev-token
+  adminToken: ""             # empty = /ingest and /eval disabled (fail closed)
+  openaiApiKey: ""
+
+# Postgres inside the cluster: for kind only. In the cloud the database is managed (Cloud SQL), so set enabled: false
+# and give database.url / database.roUrl through existingSecret instead.
+postgres:
+  enabled: true
+  image: pgvector/pgvector:pg16
+  storage: 1Gi
+
+api:
+  replicas: 1
+  port: 8000
+  resources:
+    requests: { cpu: 100m, memory: 384Mi }
+    limits: { memory: 768Mi }
+
+mockErp:
+  port: 8100
+  resources:
+    requests: { cpu: 50m, memory: 96Mi }
+    limits: { memory: 256Mi }

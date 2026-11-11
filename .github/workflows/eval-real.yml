@@ -1,0 +1,89 @@
+# The REAL-model eval (quality gate, NFR-03). Manual trigger only: every run costs money and uses the provider's daily
+# request quota (50/day on the current account; one full 27-case run needs about 75-90 requests, so use `resume`).
+# Needs the repository secret OPENAI_API_KEY. The report is uploaded as an artifact; commit it yourself if you keep it.
+#
+# Exit codes of core.evals.run: 0 gate passed, 1 gate failed, 2 preflight failed, 3 INCOMPLETE (quota) -> resume later.
+name: eval-real
+
+on:
+  workflow_dispatch:
+    inputs:
+      engagement:
+        description: Engagement folder
+        default: demo-logistics
+      model:
+        description: Chat model (LLM_MODEL)
+        default: gpt-6-luna
+      resume:
+        description: Optional committed report .json to resume from (path from the repo root)
+        default: ""
+      cases:
+        description: Optional case ids, space separated (e.g. "q-018 q-019")
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-real   # never two real evals at once: they would share one quota
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_USER: fde, POSTGRES_PASSWORD: fde, POSTGRES_DB: fde }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fde -d fde" --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      FAKE_LLM: "0"
+      OTEL_TRACES_EXPORTER: none
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      LLM_MODEL: ${{ inputs.model }}
+      ENGAGEMENT: ${{ inputs.engagement }}
+      DATABASE_URL: postgresql://fde:fde@localhost:5432/fde
+      AGENT_RO_DATABASE_URL: postgresql://agent_ro:agent_ro@localhost:5432/fde
+      ERP_API_URL: http://localhost:8100
+      ERP_API_TOKEN: dev-token
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the secret exists (never print it)
+        run: test -n "$OPENAI_API_KEY" || { echo "Repository secret OPENAI_API_KEY is not set"; exit 2; }
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.1"
+          enable-cache: true
+      - run: uv sync --frozen --no-dev
+      - name: Database, data and REAL embeddings
+        run: |
+          uv run python -m core.db.migrate --engagement "$ENGAGEMENT"
+          uv run python -m core.ingest.seed --engagement "$ENGAGEMENT"
+          uv run python -m core.ingest.run --engagement "$ENGAGEMENT"
+      - name: Start the mock systems
+        run: |
+          uv run python services/mock-erp/app.py > mock-erp.log 2>&1 &
+          sleep 3
+      - name: Real eval
+        # Inputs reach the shell through env vars, never pasted into the script (avoids script injection).
+        env:
+          RESUME: ${{ inputs.resume }}
+          CASES: ${{ inputs.cases }}
+        run: |
+          args=(--engagement "$ENGAGEMENT")
+          if [ -n "$RESUME" ]; then args+=(--resume "$RESUME"); fi
+          for c in $CASES; do
+            [[ "$c" =~ ^q-[0-9]{3}$ ]] || { echo "bad case id: $c"; exit 2; }
+            args+=(--case "$c")
+          done
+          uv run python -m core.evals.run "${args[@]}"
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report-${{ inputs.engagement }}-${{ github.run_number }}
+          path: engagements/${{ inputs.engagement }}/evals/reports/
+          if-no-files-found: warn

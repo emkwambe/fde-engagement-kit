@@ -16,7 +16,7 @@ param(
   [Parameter(Position = 0)]
   [ValidateSet('help', 'setup', 'up', 'down', 'migrate', 'seed', 'ingest', 'eval', 'demo',
                'test', 'lint', 'kind-up', 'kind-down', 'ingest-remote', 'check-tools',
-               'erp', 'erp-spec', 'api')]
+               'erp', 'erp-spec', 'api', 'images', 'stack-down')]
   [string]$Task = 'help',
 
   [string]$Engagement = 'demo-logistics'
@@ -56,12 +56,14 @@ switch ($Task) {
       'Tasks:',
       '  check-tools    Verify required CLIs are installed',
       '  setup          Create .venv and install dependencies with uv          (Day 1)',
-      '  up / down      Start / stop the local Docker Compose stack',
+      '  up / down      Start / stop the local database (Postgres + pgvector) for development',
       '  migrate        Create database schemas, tables, read-only role        (Day 1)',
       '  seed           Generate synthetic data with fixed seeds                (Day 1)',
       '  ingest         ETL tables + embed documents into pgvector             (Day 1)',
       '  eval           Run the golden-set evaluation, write report            (Day 3)',
-      '  demo           up + migrate + seed + ingest + start API at http://localhost:8000/docs',
+      '  demo           Whole stack in containers: postgres, seed, migrate+ingest, mock ERP, API (Day 4)',
+      '  images         Build the fde-api and fde-mock-erp images, tagged with the git commit (Day 4)',
+      '  stack-down     Stop the demo containers (data volumes are kept)',
       '  test / lint    pytest / ruff + mypy',
       '  erp            Run the mock ERP (legacy system) at http://localhost:8100 (Day 2)',
       '  api            Run the API + agent console at http://localhost:8000        (Day 2)',
@@ -81,19 +83,26 @@ switch ($Task) {
     }
   }
   'setup'   { Invoke-Step 'Install dependencies' { uv sync } }
-  'up'      { Invoke-Step 'Start stack' { docker compose up -d --wait } }
+  'up'      { Invoke-Step 'Start database' { docker compose up -d --wait postgres } }
   'down'    { Invoke-Step 'Stop stack'  { docker compose down } }
+  'stack-down' { Invoke-Step 'Stop demo stack' { docker compose down } }
+  'images' {
+    $env:BUILD_SHA = (git rev-parse --short HEAD)
+    Invoke-Step "Build images ($env:BUILD_SHA)" { docker compose build api mock-erp }
+  }
   'migrate' { Invoke-Step 'Migrate database' { uv run python -m core.db.migrate } }
   'seed'    { Assert-EngagementExists; Invoke-Step "Seed data ($Engagement)" { uv run python -m core.ingest.seed --engagement $Engagement } }
   'ingest'  { Assert-EngagementExists; Invoke-Step "Ingest ($Engagement)"    { uv run python -m core.ingest.run  --engagement $Engagement } }
   'eval'    { Assert-EngagementExists; Invoke-Step "Evaluate ($Engagement)"  { uv run python -m core.evals.run   --engagement $Engagement } }
   'demo' {
+    # Day 4: everything runs in containers, so a clean clone needs only Docker (NFR-01).
+    # Stop a locally running API (port 8000) or mock ERP (port 8100) first, or set API_PORT / ERP_HOST_PORT.
     Assert-EngagementExists
-    & $PSCommandPath up
-    & $PSCommandPath migrate
-    & $PSCommandPath seed   -Engagement $Engagement
-    & $PSCommandPath ingest -Engagement $Engagement
-    & $PSCommandPath api -Engagement $Engagement
+    $env:BUILD_SHA = (git rev-parse --short HEAD)
+    Invoke-Step "Build and start the stack ($env:BUILD_SHA)" { docker compose up -d --build --wait --wait-timeout 300 api }
+    $port = if ($env:API_PORT) { $env:API_PORT } else { '8000' }
+    Invoke-RestMethod "http://localhost:$port/health" | ConvertTo-Json -Compress | Write-Host
+    Write-Host "Agent console: http://localhost:$port   API docs: http://localhost:$port/docs   Stop: .	asks.ps1 stack-down" -ForegroundColor Green
   }
   'api' {
     Write-Host 'Agent console: http://localhost:8000   API docs: http://localhost:8000/docs  (Ctrl+C to stop)' -ForegroundColor Green
@@ -107,7 +116,7 @@ switch ($Task) {
   }
   'kind-up' {
     Invoke-Step 'Create kind cluster' { kind create cluster --name fde --wait 120s }
-    foreach ($img in 'fde-api:local', 'fde-mock-erp:local', 'fde-ui:local') {
+    foreach ($img in 'fde-api:local', 'fde-mock-erp:local') {  # build them first: .	asks.ps1 images
       Invoke-Step "Load $img" { kind load docker-image $img --name fde }
     }
   }

@@ -1,0 +1,142 @@
+# CI (D-14, NFR-05, NFR-10, NFR-11, NFR-12). Runs on every push to master and every pull request. No API keys:
+# everything uses the fake models (FAKE_LLM=1), so CI is free and deterministic.
+#
+#   test        ruff, mypy, pytest (with a Postgres + pgvector service container), then the FAKE eval as a harness check
+#   secrets     gitleaks over the full git history
+#   containers  build both images -> trivy (no CRITICAL with a fix) -> docker compose smoke test -> Helm on kind
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FAKE_LLM: "1"
+  OTEL_TRACES_EXPORTER: none
+  DATABASE_URL: postgresql://fde:fde@localhost:5432/fde
+  AGENT_RO_DATABASE_URL: postgresql://agent_ro:agent_ro@localhost:5432/fde
+  ERP_API_URL: http://localhost:8100
+  ERP_API_TOKEN: dev-token
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_USER: fde, POSTGRES_PASSWORD: fde, POSTGRES_DB: fde }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fde -d fde" --health-interval 3s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.1"
+          enable-cache: true
+      - name: Install (exactly uv.lock)
+        run: uv sync --frozen
+      - name: Ruff
+        run: uv run ruff check .
+      - name: Mypy
+        run: uv run mypy core
+      - name: Pytest
+        run: uv run pytest -q
+      - name: Fake eval (harness check, both engagements)
+        # The fake score describes the scripted fake, not quality, so the gate is not enforced here (exit 0).
+        # It proves: data loads, documents ingest, tools reach the mock systems, every case runs and is scored.
+        run: |
+          uv run python -m core.db.migrate
+          for e in $(ls engagements | grep -v '^_'); do
+            uv run python -m core.ingest.seed --engagement "$e"
+            uv run python -m core.db.migrate --engagement "$e"
+            uv run python -m core.ingest.run --engagement "$e"
+          done
+          uv run python services/mock-erp/app.py > mock-erp.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:8100/health > /dev/null && break; sleep 1; done
+          for e in $(ls engagements | grep -v '^_'); do
+            uv run python -m core.evals.run --engagement "$e"
+          done
+
+  secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the whole history: a secret removed later is still a leaked secret
+      - name: gitleaks
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --no-banner
+
+  containers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: test
+    env:
+      TRIVY_IMAGE: aquasec/trivy:0.69.3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images (tagged with the commit)
+        run: |
+          echo "BUILD_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          BUILD_SHA=${GITHUB_SHA::7} docker compose build api mock-erp
+          docker image ls --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}' | grep '^fde-'
+      - name: Non-root check
+        run: |
+          for img in fde-api:local fde-mock-erp:local; do
+            user=$(docker image inspect "$img" --format '{{.Config.User}}'); echo "$img runs as $user"
+            [ "$user" = "10001:10001" ]
+          done
+      - name: Trivy scan (fail on CRITICAL vulnerabilities that have a fix)
+        run: |
+          for img in fde-api:local fde-mock-erp:local; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image \
+              --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress "$img"
+          done
+      - name: Compose smoke test (clean checkout -> working stack)
+        run: |
+          docker compose up -d --wait --wait-timeout 300 api
+          curl -sf localhost:8000/health | tee health.json; echo
+          python3 -c "import json; h = json.load(open('health.json')); assert h['status'] == 'ok', h; assert h['version']['build_sha'] == '${BUILD_SHA}', h"
+          curl -sf -X POST localhost:8000/chat -H 'Content-Type: application/json' \
+            -d '{"thread_id": "ci-smoke", "message": "How many days late was order ORD-1043?"}'; echo
+      - name: Compose logs (on failure)
+        if: failure()
+        run: docker compose logs --no-color --tail 80
+      - name: Stop compose
+        if: always()
+        run: docker compose down
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: fde
+      - name: Helm install on kind
+        run: |
+          kind load docker-image fde-api:local fde-mock-erp:local --name fde
+          helm lint deploy/helm/fde-kit
+          helm upgrade --install fde deploy/helm/fde-kit --wait --timeout 10m \
+            --set engagement=demo-logistics \
+            --set-file engagementConfig=engagements/demo-logistics/engagement.yaml
+          kubectl get pods -o wide
+          kubectl wait --for=condition=Ready pods --all --timeout=120s
+      - name: /health through port-forward
+        run: |
+          kubectl port-forward svc/fde-api 8000:8000 > pf.log 2>&1 &
+          for i in $(seq 1 20); do curl -sf localhost:8000/health && break; sleep 2; done; echo
+          curl -sf localhost:8000/health | python3 -c "import json, sys; h = json.load(sys.stdin); assert h['status'] == 'ok', h; print('kind health ok', h['version'])"
+      - name: Kubernetes diagnostics (on failure)
+        if: failure()
+        run: |
+          kubectl get pods -o wide || true
+          kubectl describe pods | tail -60 || true
+          for p in $(kubectl get pods -o name); do kubectl logs "$p" --all-containers --tail 40 || true; done

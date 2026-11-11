@@ -227,7 +227,10 @@ def health() -> dict[str, Any]:
     ok = db_ok and vectors_ok and state["checkpointer"] == "postgres"
     return {"status": "ok" if ok else "degraded", "engagement": cfg.engagement.name,
             "llm_provider": cfg.llm.provider, "database": db_ok, "checkpointer": state["checkpointer"],
-            "embeddings_match": vectors_ok}
+            "embeddings_match": vectors_ok,
+            # Which code is this server running? BUILD_SHA is baked into the image at build time (Sprint 01, Day 4);
+            # "dev" = started from a source checkout. Closes the Day 3 "stale server" gap.
+            "version": {"app": app.version, "build_sha": os.environ.get("BUILD_SHA", "dev")}}
 
 
 @app.post("/chat", response_model=TurnResponse)

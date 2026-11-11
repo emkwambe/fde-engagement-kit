@@ -1,0 +1,6 @@
+fde-kit {{ .Chart.AppVersion }} installed as "{{ .Release.Name }}" for engagement "{{ .Values.engagement }}".
+
+Wait for the pods:      kubectl get pods -w
+Reach the API (PowerShell, second window):
+  kubectl port-forward svc/{{ .Release.Name }}-api 8000:{{ .Values.api.port }}
+  Invoke-RestMethod http://localhost:8000/health

@@ -1,0 +1,24 @@
+# Keep the build context small and secret-free: never send .env, the venv or caches to the Docker daemon.
+.env
+.env.*
+!.env.example
+.venv/
+.git/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.terraform/
+*.tfstate*
+docs/
+tests/
+playbook/
+scripts/
+deploy/helm/
+deploy/terraform/
+.github/
+# generated data and runtime files: created by the seed job / the running ERP, not baked into images
+engagements/*/data/tables/*.csv
+engagements/*/evals/reports/*
+services/*/data/

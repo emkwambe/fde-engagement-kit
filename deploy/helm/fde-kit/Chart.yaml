@@ -1,0 +1,6 @@
+apiVersion: v2
+name: fde-kit
+description: FDE Engagement Kit - agent API (with console), mock ERP, and a Postgres + pgvector for kind (D-13)
+type: application
+version: 0.1.0          # chart version: bump when templates change
+appVersion: "0.3.0"     # the API version (core/api/main.py)

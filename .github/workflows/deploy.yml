@@ -1,0 +1,61 @@
+# Deploy to GCP Cloud Run (D-14, D-15). PRESENT BUT DISABLED until the human enables it:
+#   1. Run Terraform once by hand (docs/11-deployment-runbook.md section 4): it creates Artifact Registry, Cloud SQL,
+#      secrets, the runtime and deploy service accounts, the Cloud Run services and job, and the Workload Identity
+#      Federation pool that lets THIS repository (and only this one) act as the deploy service account. No JSON key.
+#   2. Set repository VARIABLES (Settings -> Secrets and variables -> Actions -> Variables), values from `terraform output`:
+#        DEPLOY_ENABLED = true, GCP_PROJECT_ID, GCP_REGION (us-east1), GCP_WIF_PROVIDER, GCP_DEPLOY_SA
+#   3. Actions -> deploy -> Run workflow, type "deploy".
+# Terraform owns the infrastructure; this workflow only rolls out new images (Terraform ignores image changes).
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type "deploy" to build, push and deploy this commit to Cloud Run
+        required: true
+
+permissions:
+  contents: read
+  id-token: write   # lets GitHub mint an OIDC token that GCP exchanges for short-lived credentials
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: vars.DEPLOY_ENABLED == 'true' && inputs.confirm == 'deploy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION || 'us-east1' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Build and push both images
+        run: |
+          TAG=${GITHUB_SHA::7}
+          REG="$REGION-docker.pkg.dev/$PROJECT_ID/fde"
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker build -f deploy/docker/api.Dockerfile --build-arg BUILD_SHA=$TAG -t "$REG/fde-api:$TAG" .
+          docker build -f deploy/docker/mock-erp.Dockerfile --build-arg BUILD_SHA=$TAG -t "$REG/fde-mock-erp:$TAG" .
+          docker push "$REG/fde-api:$TAG"
+          docker push "$REG/fde-mock-erp:$TAG"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"; echo "REG=$REG" >> "$GITHUB_ENV"
+      - name: Roll out (same image everywhere, NFR-11)
+        run: |
+          gcloud run deploy fde-mock-erp --image "$REG/fde-mock-erp:$TAG" --region "$REGION" --quiet
+          gcloud run jobs update fde-ingest --image "$REG/fde-api:$TAG" --region "$REGION" --quiet
+          gcloud run deploy fde-api --image "$REG/fde-api:$TAG" --region "$REGION" --quiet
+      - name: Smoke test
+        run: |
+          URL=$(gcloud run services describe fde-api --region "$REGION" --format 'value(status.url)')
+          curl -sf "$URL/health" | tee health.json; echo
+          python3 -c "import json; h = json.load(open('health.json')); assert h['version']['build_sha'] == '$TAG', h"
