@@ -454,3 +454,14 @@ The F-R1 fix changes `core/api/main.py` and `core/agent/service.py` after the `k
 security changes from the review, not changes needed by engagement #2, so the tag was not moved. The proof stays valid
 for the range that added engagement #2: `git diff --stat kit-generic..e69d0b6 -- core/` prints nothing. Output after the
 Sprint 01b commit is below.
+
+```text
+> git diff --stat kit-generic..e69d0b6 -- core/
+(no output: 0 lines)
+> git diff --stat kit-generic..HEAD -- core/      (after the Sprint 01b commit 065ccf1)
+ core/agent/service.py |  8 ++++--
+ core/api/main.py      | 69 ++++++++++++++++++++++++++++++++++++++++-----------
+ 2 files changed, 60 insertions(+), 17 deletions(-)
+```
+
+CI on the Sprint 01b commit `065ccf1`: run 43047112135, **success** (test, secrets, containers), 179 tests on the clean runner.
