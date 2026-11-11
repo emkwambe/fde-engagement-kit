@@ -2,6 +2,9 @@
 
 Idempotent: re-running with the same files produces the same rows (upsert on primary key).
 Rows that cannot be fixed are rejected and counted, never silently dropped.
+
+Which tables, columns, keys and cleaning rules: declared per engagement in engagement.yaml
+(sources.tables[].tables, Sprint 01 kit-generic). This module only knows column TYPES, never a customer's tables.
 """
 
 from __future__ import annotations
@@ -10,14 +13,15 @@ import csv
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 import psycopg
 
-VALID_TIERS = {"standard": "Standard", "silver": "Silver", "gold": "Gold", "platinum": "Platinum"}
+from core.config.schema import ColumnSpec, TableSource, TableSpecConfig
+
 _DATE_FORMATS = ("%m/%d/%Y %H:%M", "%m/%d/%Y", "%Y-%m-%d")
 
 
@@ -31,11 +35,43 @@ def clean_str(v: str | None) -> str | None:
     return v or None
 
 
-def clean_tier(v: str | None) -> str:
+def clean_enum(v: str | None, values: list[str], name: str = "value") -> str:
+    """Case-insensitive, trimmed match against the canonical spellings: 'gold ', 'GOLD' -> 'Gold'."""
+    canonical = {x.lower(): x for x in values}
     key = (v or "").strip().lower()
-    if key not in VALID_TIERS:
-        raise RowError(f"invalid tier {v!r}")
-    return VALID_TIERS[key]
+    if key not in canonical:
+        raise RowError(f"invalid {name} {v!r}")
+    return canonical[key]
+
+
+def clean_int(v: str | None) -> int:
+    try:
+        return int((v or "").replace(",", "").strip())
+    except ValueError:
+        raise RowError(f"invalid integer {v!r}") from None
+
+
+def clean_number(v: str | None) -> float:
+    try:
+        return float((v or "").replace(",", "").strip())
+    except ValueError:
+        raise RowError(f"invalid number {v!r}") from None
+
+
+def clean_bool(v: str | None) -> bool | None:
+    key = (v or "").strip().lower()
+    if not key:
+        return None
+    if key in {"true", "t", "yes", "y", "1"}:
+        return True
+    if key in {"false", "f", "no", "n", "0"}:
+        return False
+    raise RowError(f"invalid boolean {v!r}")
+
+
+def clean_date(v: str | None, *, required: bool = True) -> date | None:
+    ts = clean_ts(v, required=required)
+    return ts.date() if ts else None
 
 
 def clean_ts(v: str | None, *, required: bool = True) -> datetime | None:
@@ -66,43 +102,56 @@ def clean_money(v: str | None) -> Decimal:
         raise RowError(f"invalid amount {v!r}") from None
 
 
-# ---------------------------------------------------------------- table specs
+# ---------------------------------------------------------------- table specs (from engagement.yaml)
+def clean_value(raw: dict[str, str], name: str, col: ColumnSpec) -> Any:
+    """Clean one cell by its declared type. A REQUIRED column that is missing from the file or empty rejects the row.
+    Defaults keep the Day 1 behaviour: timestamps, dates, numbers, money and enums are required; text and bool are not."""
+    required = col.required if col.required is not None else col.type not in {"text", "bool"}
+    if name not in raw and required:
+        raise RowError(f"missing column {name}")
+    value = raw.get(name)
+    if col.type == "text":
+        text = clean_str(value) or col.default
+        if required and text is None:
+            raise RowError(f"missing {name}")
+        return text.lower() if (text is not None and col.lower) else text
+    if col.type == "enum":
+        return clean_enum(value, col.values, name) if (required or clean_str(value)) else None
+    if col.type == "timestamp":
+        return clean_ts(value, required=required)
+    if col.type == "date":
+        return clean_date(value, required=required)
+    if col.type == "bool":
+        return clean_bool(value)
+    if not required and clean_str(value) is None:
+        return None
+    cleaners: dict[str, Callable[[str | None], Any]] = {"int": clean_int, "number": clean_number, "money": clean_money}
+    return cleaners[col.type](value)
+
+
 @dataclass
 class TableSpec:
     file: str
     table: str
     key: str
     clean: Callable[[dict[str, str]], dict[str, Any]]
-    fk: tuple[str, str] | None = None  # (column, referenced table) checked before insert
+    # (column, referenced table, its key column): checked before insert. An empty value is allowed (optional link,
+    # e.g. a work order with no technician yet); a value that names no existing parent rejects the row.
+    fks: list[tuple[str, str, str]] = field(default_factory=list)
+
+    @classmethod
+    def from_config(cls, t: TableSpecConfig, keys: dict[str, str]) -> TableSpec:
+        def clean(raw: dict[str, str]) -> dict[str, Any]:
+            return {name: clean_value(raw, name, col) for name, col in t.columns.items()}
+
+        fks = [(column, parent, keys.get(parent, column)) for column, parent in t.references.items()]
+        return cls(t.file, t.name, t.key, clean, fks=fks)
 
 
-def _customer(r: dict[str, str]) -> dict[str, Any]:
-    return {"customer_id": clean_str(r["customer_id"]), "name": clean_str(r["name"]),
-            "tier": clean_tier(r["tier"]), "region": clean_str(r.get("region")),
-            "email": clean_str(r.get("email")), "phone": clean_str(r.get("phone"))}
-
-
-def _order(r: dict[str, str]) -> dict[str, Any]:
-    return {"order_id": clean_str(r["order_id"]), "customer_id": clean_str(r["customer_id"]),
-            "created_at": clean_ts(r["created_at"]), "promised_at": clean_ts(r["promised_at"]),
-            "delivered_at": clean_ts(r.get("delivered_at"), required=False),
-            "status": (clean_str(r["status"]) or "unknown").lower(), "value_usd": clean_money(r["value_usd"])}
-
-
-def _shipment(r: dict[str, str]) -> dict[str, Any]:
-    return {"shipment_id": clean_str(r["shipment_id"]), "order_id": clean_str(r["order_id"]),
-            "carrier": clean_str(r["carrier"]), "origin": clean_str(r.get("origin")),
-            "destination": clean_str(r.get("destination")),
-            "last_scan_at": clean_ts(r.get("last_scan_at"), required=False),
-            "last_status": clean_str(r.get("last_status"))}
-
-
-# Load order matters: parents before children.
-LOGISTICS_TABLES = [
-    TableSpec("customers.csv", "customers", "customer_id", _customer),
-    TableSpec("orders.csv", "orders", "order_id", _order, fk=("customer_id", "customers")),
-    TableSpec("shipments.csv", "shipments", "shipment_id", _shipment, fk=("order_id", "orders")),
-]
+def table_specs(source: TableSource) -> list[TableSpec]:
+    """TableSpecs for one engagement table source, in the declared (parents-first) order."""
+    keys = {t.name: t.key for t in source.tables}
+    return [TableSpec.from_config(t, keys) for t in source.tables]
 
 
 @dataclass
@@ -133,11 +182,9 @@ def load_table(conn: psycopg.Connection, folder: Path, schema: str, spec: TableS
     if not path.exists():
         raise FileNotFoundError(f"{path} not found. Run: .\\tasks.ps1 seed")
 
-    known_parents: set[str] = set()
-    if spec.fk:
-        col, parent = spec.fk
-        parent_key = next(s.key for s in LOGISTICS_TABLES if s.table == parent)
-        known_parents = {r[0] for r in conn.execute(f"SELECT {parent_key} FROM {schema}.{parent}")}
+    known_parents: dict[str, set[str]] = {
+        column: {r[0] for r in conn.execute(f"SELECT {parent_key} FROM {schema}.{parent}")}
+        for column, parent, parent_key in spec.fks}
 
     seen: dict[str, dict[str, Any]] = {}
     with path.open(newline="", encoding="utf-8") as f:
@@ -147,8 +194,9 @@ def load_table(conn: psycopg.Connection, folder: Path, schema: str, spec: TableS
                 row = spec.clean(raw)
                 if not row[spec.key]:
                     raise RowError("missing primary key")
-                if spec.fk and row[spec.fk[0]] not in known_parents:
-                    raise RowError(f"unknown {spec.fk[0]} {row[spec.fk[0]]!r}")
+                for column, known in known_parents.items():
+                    if row[column] is not None and row[column] not in known:
+                        raise RowError(f"unknown {column} {row[column]!r}")
             except (RowError, KeyError) as exc:
                 result.rejected.append({"row": json.dumps(raw), "reason": str(exc)})
                 continue
@@ -161,11 +209,11 @@ def load_table(conn: psycopg.Connection, folder: Path, schema: str, spec: TableS
     return result
 
 
-def run_tabular_etl(conn: psycopg.Connection, engagement: str, folder: Path, schema: str = "ops",
-                    specs: list[TableSpec] | None = None) -> list[LoadResult]:
+def run_tabular_etl(conn: psycopg.Connection, engagement: str, folder: Path, schema: str,
+                    specs: list[TableSpec]) -> list[LoadResult]:
     """Load every table, record each run in etl.runs, return per-table results."""
     results = []
-    for spec in specs or LOGISTICS_TABLES:
+    for spec in specs:
         run_id = conn.execute(
             "INSERT INTO etl.runs (engagement, source) VALUES (%s, %s) RETURNING id",
             (engagement, str(folder / spec.file)),

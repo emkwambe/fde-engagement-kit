@@ -28,7 +28,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from core.agent.graph import AgentTurn, ask, decide
 from core.config.schema import EngagementConfig
-from core.guardrails import BLOCKED_ANSWER, check_input
+from core.guardrails import check_input
 from core.guardrails.pii import redact
 from core.observability.context import current_trace_id
 from core.observability.metrics import APPROVALS, GUARDRAIL_BLOCKS
@@ -47,7 +47,7 @@ class AgentService:
         blocked = check_input(message, self.cfg.guardrails)
         if blocked:  # direct prompt injection: refuse without calling the model or any tool (T-02)
             GUARDRAIL_BLOCKS.labels("input_injection").inc()
-            turn = AgentTurn(thread_id, "done", answer=BLOCKED_ANSWER)
+            turn = AgentTurn(thread_id, "done", answer=self.cfg.guardrails.blocked_answer)
             first = {"event": "guardrail_blocked", "detail": {"user": user, "matched": blocked, **self._text(message)}}
             self._record(turn, trace, first=first)
             return turn

@@ -14,10 +14,10 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from core.config.schema import OpenAPIAuth, OpenAPITool, SQLTool
-from core.ingest.seed import generate_logistics
 from core.toolgen.openapi import tools_from_openapi
 from core.toolgen.registry import build_tools, requires_approval
 from core.toolgen.sql import SQLRejected, run_query, sql_tool, validate_sql
+from tests.helpers import generate_logistics
 
 SPEC = Path("services/mock-erp/openapi.yaml")
 OPS = ["getShipment", "listShipments", "createTicket", "getTicket"]
@@ -129,10 +129,11 @@ def test_validate_sql_rejects_writes_and_tricks(query, reason):
 def ro_cfg(migrated_db, conn, demo_cfg):
     from core.config import resolve_path
     from core.ingest.etl import run_tabular_etl
+    from tests.helpers import logistics_specs
 
     folder = resolve_path(demo_cfg.sources.tables[0].path)
     generate_logistics(folder)
-    run_tabular_etl(conn, "demo-logistics", folder)
+    run_tabular_etl(conn, "demo-logistics", folder, "ops", logistics_specs())
     conn.commit()
     return SQLTool(dsn=migrated_db.replace("fde:fde@", "agent_ro:agent_ro@"), schema="ops", row_limit=5)
 

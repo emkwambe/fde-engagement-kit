@@ -5,12 +5,16 @@ engagement:
   name: customer-slug
   customer: Customer Name
   description: One-line problem statement from discovery.md
+  examples: []                # example questions shown as buttons in the console
 
 llm:
   provider: openai            # openai | anthropic | azure_openai | bedrock | vertex | fake
   model: ${LLM_MODEL}         # set a current model name; verify pricing
   # temperature: 0          # optional; leave unset unless the model supports it (gpt-6-luna does not, DC-016)
   max_steps: 8
+  # system_prompt: engagements/customer-slug/prompts/agent-v1.txt   # optional; unset = the kit's generic prompt
+  # prompt_version: agent-v1                                        # required with system_prompt; change with the text
+  # fake_script: engagements/customer-slug/extensions/fake_agent.py # FAKE_LLM=1 script (class FakeAgent); unset = generic
 
 embeddings:
   provider: openai
@@ -27,6 +31,7 @@ retrieval:
   chunk_size: 800
   chunk_overlap: 100
   min_score: 0.3      # tune per engagement with evals (Day 3)
+  # tool_description: "Search the customer's policy documents (...). Returns passages with a 'ref' label; cite facts as [ref]."
 
 sources:
   documents:
@@ -36,13 +41,24 @@ sources:
   tables:
     - type: csv               # csv | json | sql
       path: engagements/customer-slug/data/tables
-      target_schema: ops
+      target_schema: customer_slug              # one schema per engagement (letters, digits, _)
+      schema_sql: [engagements/customer-slug/sql/001_tables.sql]   # idempotent CREATE ... IF NOT EXISTS
+      # seed_script: engagements/customer-slug/extensions/seed.py  # synthetic data only: generate(out_dir)
+      tables:                 # load order = parents first; columns are cleaned by type
+        - name: customers
+          file: customers.csv
+          key: customer_id
+          columns:
+            customer_id: {type: text}
+            plan: {type: enum, values: [Basic, Premium]}   # text|int|number|money|timestamp|date|bool|enum
+            joined_at: {type: timestamp, required: false}
+          # references: {parent_column: parent_table}
 
 tools:
   sql:
     enabled: true
     dsn: ${AGENT_RO_DATABASE_URL}   # read-only role
-    schema: ops
+    schema: customer_slug           # same as target_schema; migrate grants the read-only role SELECT on it
     tables: []                      # empty = all tables in schema
     row_limit: 200
   openapi:
@@ -57,6 +73,7 @@ guardrails:
   pii_redaction: [email, phone, ssn]
   injection_filter: true
   log_prompts: false
+  # blocked_answer: "I can't follow instructions that try to change my rules. I can help with ... ."
 
 evals:
   golden_set: engagements/customer-slug/evals/golden.jsonl

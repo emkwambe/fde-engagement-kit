@@ -70,7 +70,7 @@ and latency of the results they reused. The real eval of demo-logistics is still
 |---|---|---|---|---|
 | 0 Day 3 close-out | Done (real eval INCOMPLETE, see NEEDS HUMAN) | `27222c7` | 137 passed | `docs/teaching/15-measuring-quality.md`, `docs/16-deferred-ideas.md`, DC-016 |
 | 1 Observability + endpoints | Done | `46fbc0b` | 146 passed | `docs/teaching/16-observability.md`, `tests/day03/test_observability.py`, DC-017 |
-| 2 Day 4 platform | Done locally + in CI; cloud deploy is NEEDS HUMAN | PR #1 (`af3f620`, `37a85e0`, docs commit) | 147 passed (laptop and CI) | CI run 43035141379 (green), notes 17-20, DC-018 |
+| 2 Day 4 platform | Done locally + in CI; cloud deploy is NEEDS HUMAN | PR #1: `af3f620`, `57a3f59`, `f19e899` (CI tested `37a85e0` = GitHub's merge of the PR) | 147 passed (laptop and CI) | CI run 43035141379 (green), notes 17-20, DC-018 |
 | 3a Kit generic | Not started | | | |
 | 3b Engagement #2 | Not started | | | |
 | 3c Docs and closure | Not started | | | |
@@ -148,7 +148,28 @@ and latency of the results they reused. The real eval of demo-logistics is still
 
 ## 5. Kit-genericity proof
 
-(Phase 3.)
+### Gaps fixed in Phase 3a (before the `kit-generic` tag)
+
+| Gap | Was | Now | DC |
+|---|---|---|---|
+| G1 tabular ETL | `LOGISTICS_TABLES`, `clean_tier` in `core/ingest/etl.py` | table specs + column types in `sources.tables[].tables` | DC-019 |
+| G1b ETL foreign keys | one FK per table, no optional links | every reference checked, empty allowed | DC-020 |
+| G2 seed generator | `generate_logistics` in `core/ingest/seed.py` | engagement `extensions/seed.py`, named by `seed_script` | DC-021 |
+| G3 ops tables | logistics migration 003 only | engagement `schema_sql` in its own schema (003 kept, append-only) | DC-022 |
+| G4 read-only grants | `ops` only | `ops` + configured `tools.sql.schema` | DC-023 |
+| G5 fake model | logistics script in `core/agent/fake.py` | `ScriptedFake` + `GenericFakeChat`; engagement `fake_script` | DC-024 |
+| G6 system prompt | logistics text in `core/agent/graph.py` | `llm.system_prompt` + `prompt_version`; logistics byte-identical (sha `537c08f4c028`) | DC-025 |
+| G7 scoring | `WRITE_TOOLS = {"createTicket"}` | any paused requires-approval call | DC-026 |
+| G8 refusal text | mentioned shipments and SLA credits | `guardrails.blocked_answer` | DC-027 |
+| G9 doc tool description | listed SLA, claims | `retrieval.tool_description` | DC-028 |
+| G10 console examples | logistics questions in `ui/index.html` | `engagement.examples` via `GET /engagement` | DC-029 |
+
+Logistics after 3a: all tests pass (same assertions; imports moved to `tests/helpers.py`), fake eval 15/27 before and after,
+prompt sha unchanged. New tests: `tests/day05/test_kit_generic.py` (19 with the ETL tests).
+
+### Zero-diff proof for engagement #2
+
+(Phase 3b.)
 
 ## 6. Decisions and deviations
 
@@ -182,6 +203,10 @@ and latency of the results they reused. The real eval of demo-logistics is still
   kind moved to CI (R-10's mitigation). Not a code problem, but the brief assumed local runs.
 - **F-09 Shell heredocs with quotes failed twice** in the executor's own tooling (bash "unexpected EOF"). No repo impact;
   edits switched to script files.
+- **F-10 Wrong commit named in notes 17-19 (corrected).** I first wrote that CI built "commit 37a85e0". For a pull_request
+  event GitHub tests a merge commit of the PR into master, so 37a85e0 is that merge commit; the branch head was 57a3f59.
+  Origin: assuming GITHUB_SHA = branch head. Caught by: the executor, comparing `git log` after the merge with the notes.
+  Fixed in the notes and this report before the tag.
 - **F-03 Logistics content in `core/`** beyond the brief's list (scoring `WRITE_TOOLS`, refusal text, doc tool description,
   system prompt). Handled in Phase 3a.
 

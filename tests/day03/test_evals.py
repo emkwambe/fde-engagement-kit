@@ -122,7 +122,7 @@ def test_preflight_refuses_to_score_against_mismatched_vectors(conn, demo_cfg):
 # ----------------------------------------------------------------------------- the runner, end to end (needs Postgres)
 @pytest.fixture
 def erp(tmp_path):
-    from core.ingest.seed import generate_logistics
+    from tests.helpers import generate_logistics
 
     spec = importlib.util.spec_from_file_location("mock_erp_app_eval", "services/mock-erp/app.py")
     module = importlib.util.module_from_spec(spec)
@@ -137,11 +137,11 @@ def erp(tmp_path):
 @pytest.mark.db
 def test_fake_run_scores_cases_and_writes_a_report(migrated_db, conn, demo_cfg, golden, erp, tmp_path):
     from core.ingest.etl import run_tabular_etl
-    from core.ingest.seed import generate_logistics
+    from tests.helpers import generate_logistics, logistics_specs
 
     folder = resolve_path(demo_cfg.sources.tables[0].path)
     generate_logistics(folder)
-    run_tabular_etl(conn, "demo-logistics", folder)
+    run_tabular_etl(conn, "demo-logistics", folder, "ops", logistics_specs())
     ingest_documents(conn, demo_cfg, get_embeddings(demo_cfg.embeddings))
     conn.commit()
     api = demo_cfg.tools.openapi[0].model_copy(update={

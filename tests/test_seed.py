@@ -1,6 +1,6 @@
 import csv
 
-from core.ingest.seed import generate_logistics
+from tests.helpers import generate_logistics
 
 
 def _read(path):

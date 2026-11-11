@@ -2,7 +2,7 @@ import pytest
 
 from core.config import resolve_path
 from core.ingest.etl import run_tabular_etl
-from core.ingest.seed import generate_logistics
+from tests.helpers import generate_logistics, logistics_specs
 
 pytestmark = pytest.mark.db
 
@@ -10,8 +10,8 @@ pytestmark = pytest.mark.db
 def test_etl_loads_cleans_and_is_idempotent(conn, demo_cfg):
     folder = resolve_path(demo_cfg.sources.tables[0].path)
     generate_logistics(folder)
-    first = {r.table: r for r in run_tabular_etl(conn, "demo-logistics", folder)}
-    second = {r.table: r for r in run_tabular_etl(conn, "demo-logistics", folder)}
+    first = {r.table: r for r in run_tabular_etl(conn, "demo-logistics", folder, "ops", logistics_specs())}
+    second = {r.table: r for r in run_tabular_etl(conn, "demo-logistics", folder, "ops", logistics_specs())}
 
     assert first["customers"].rows_loaded == 40          # 41 rows, Bronze rejected
     assert len(first["customers"].rejected) == 1
@@ -32,7 +32,7 @@ def test_readonly_role_cannot_write(migrated_db, conn, demo_cfg):
 
     folder = resolve_path(demo_cfg.sources.tables[0].path)
     generate_logistics(folder)
-    run_tabular_etl(conn, "demo-logistics", folder)
+    run_tabular_etl(conn, "demo-logistics", folder, "ops", logistics_specs())
     conn.commit()
     ro_url = migrated_db.replace("fde:fde@", "agent_ro:agent_ro@")
     with psycopg.connect(ro_url) as ro:

@@ -22,8 +22,6 @@ from typing import Any
 from core.agent.graph import AgentTurn
 from core.evals.golden import GoldenCase
 
-WRITE_TOOLS = {"createTicket"}
-
 
 @dataclass
 class CaseScore:
@@ -95,7 +93,8 @@ def score_case(case: GoldenCase, turn: AgentTurn) -> CaseScore:
             s.reasons.append(f"facts missing: {missing}")
 
     if case.requires_approval:
-        ok = turn.status == "needs_approval" and pending is not None and pending["name"] in WRITE_TOOLS
+        # Only tools flagged requires_approval can be pending, so "paused with a pending call" means "paused for a write".
+        ok = turn.status == "needs_approval" and pending is not None
         wrong = [k for k, v in case.expected_args.items() if not (pending and _same(v, pending["args"].get(k)))]
         s.checks["approval"] = ok and not wrong
         if not ok:

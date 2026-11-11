@@ -29,7 +29,7 @@ talk to the outside world (the database, the mock ERP, OpenAI), and those parts 
 Color key: blue = **INTENT (Why?)**, purple = **CONTEXT (When / where?)**, green = **ACTION (How?)**, yellow = **RESULT (What?)**.
 
 > [!IMPORTANT]
-> These results come from GitHub Actions run 43035141379 (job `containers`, commit `37a85e0`), not from the author's
+> These results come from GitHub Actions run 43035141379 (job `containers`, commit `37a85e0` (GitHub's test merge of PR #1 into master; branch head `57a3f59`)), not from the author's
 > laptop: when the images were first built, the laptop had 2.2-2.9 GB of free memory, under the project's 3 GB floor
 > for heavy local runs. The CI runner is a clean machine, which is exactly the "fresh clone" NFR-01 asks about. Locally
 > you run the same steps with `.\tasks.ps1 demo`.
@@ -94,7 +94,7 @@ Color key: blue = **INTENT (Why?)**, purple = **CONTEXT (When / where?)**, green
 > {"status":"ok","engagement":"demo-logistics","llm_provider":"fake","database":true,"checkpointer":"postgres",
 >  "embeddings_match":true,"version":{"app":"0.3.0","build_sha":"37a85e0"}}
 > The jobs EXIT (that is success for a job); the services become HEALTHY. /health says status ok, the vectors match
-> the model, and version.build_sha is the commit CI built. The next step in the log asked /chat a tool-calling
+> the model, and version.build_sha is the commit CI built (37a85e0 = GitHub's merge of PR #1, the commit a pull_request run tests). The next step in the log asked /chat a tool-calling
 > question and got: "ORD-1043 (Gold, customer C-007) was 3 day(s) late on a $4,820.00 order."
 > ```
 

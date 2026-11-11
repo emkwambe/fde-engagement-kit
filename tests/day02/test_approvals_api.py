@@ -18,8 +18,8 @@ from core.agent.graph import agent_model, agent_tools, build_agent
 from core.agent.service import AgentService
 from core.config.schema import SQLTool
 from core.db.connection import connect
-from core.ingest.seed import generate_logistics
 from core.llm.factory import get_embeddings
+from tests.helpers import generate_logistics
 
 TICKET_REQUEST = "Open a credit ticket for ORD-1043 for the amount the policy allows."
 
@@ -41,10 +41,11 @@ def client(migrated_db, conn, demo_cfg, erp):
     """The real API app, with its agent pointed at the in-process ERP and the read-only DB role."""
     from core.config import resolve_path
     from core.ingest.etl import run_tabular_etl
+    from tests.helpers import logistics_specs
 
     folder = resolve_path(demo_cfg.sources.tables[0].path)
     generate_logistics(folder)
-    run_tabular_etl(conn, "demo-logistics", folder)
+    run_tabular_etl(conn, "demo-logistics", folder, "ops", logistics_specs())
     conn.commit()
     openapi = demo_cfg.tools.openapi[0].model_copy(update={
         "base_url": "http://testserver", "auth": demo_cfg.tools.openapi[0].auth.model_copy(update={"token": "tok"})})

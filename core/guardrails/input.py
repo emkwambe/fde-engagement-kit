@@ -10,8 +10,8 @@ from __future__ import annotations
 from core.config.schema import Guardrails
 from core.guardrails.injection import find_injection
 
-BLOCKED_ANSWER = ("I can't follow instructions that try to change my rules. I can help with orders, shipments, "
-                  "SLA credits and claims within my normal permissions.")
+# The reply text is configured per engagement (guardrails.blocked_answer); this is the kit's default wording.
+BLOCKED_ANSWER = Guardrails.model_fields["blocked_answer"].default
 
 
 def check_input(message: str, cfg: Guardrails) -> list[str]:

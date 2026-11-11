@@ -13,7 +13,7 @@ from typing import Any
 from core.config import load_engagement, resolve_path
 from core.config.schema import EngagementConfig
 from core.db.connection import connect
-from core.ingest.etl import run_tabular_etl
+from core.ingest.etl import run_tabular_etl, table_specs
 from core.llm.factory import get_embeddings
 
 
@@ -26,7 +26,10 @@ def run_ingestion(cfg: EngagementConfig, *, tables: bool = True, docs: bool = Tr
             for src in cfg.sources.tables:
                 if src.type != "csv":
                     raise NotImplementedError(f"Table source type '{src.type}' arrives later.")
-                for r in run_tabular_etl(conn, cfg.engagement.name, resolve_path(src.path), src.target_schema):
+                if not src.tables:
+                    continue  # documents-only engagement, or tables loaded some other way
+                for r in run_tabular_etl(conn, cfg.engagement.name, resolve_path(src.path), src.target_schema,
+                                         table_specs(src)):
                     result["tables"].append({"table": r.table, "rows_in": r.rows_in, "rows_loaded": r.rows_loaded,
                                              "duplicates": r.duplicates, "rejected": len(r.rejected),
                                              "rejected_reasons": [rej["reason"] for rej in r.rejected[:5]]})

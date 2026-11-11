@@ -12,7 +12,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from core.ingest.seed import generate_logistics
+from tests.helpers import generate_logistics
 
 ERP_DIR = Path("services/mock-erp")
 AUTH = {"Authorization": "Bearer test-token"}

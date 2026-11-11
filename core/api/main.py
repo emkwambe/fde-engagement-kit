@@ -2,6 +2,7 @@
 
 Endpoints
   GET  /health                          status, engagement, model provider, database, checkpointer, embeddings_match
+  GET  /engagement                      who this server serves: name, customer, description, example questions
   POST /chat                            the agent: answer, or a write paused for approval   (Day 2)
   POST /ask                             documents only: cited RAG answer                     (Day 1)
   GET  /approvals                       writes waiting for a human decision
@@ -231,6 +232,13 @@ def health() -> dict[str, Any]:
             # Which code is this server running? BUILD_SHA is baked into the image at build time (Sprint 01, Day 4);
             # "dev" = started from a source checkout. Closes the Day 3 "stale server" gap.
             "version": {"app": app.version, "build_sha": os.environ.get("BUILD_SHA", "dev")}}
+
+
+@app.get("/engagement")
+def engagement() -> dict[str, Any]:
+    """Public facts about the configured engagement, for the console (no secrets, no settings)."""
+    info = state["cfg"].engagement
+    return {"name": info.name, "customer": info.customer, "description": info.description, "examples": info.examples}
 
 
 @app.post("/chat", response_model=TurnResponse)

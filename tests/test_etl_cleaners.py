@@ -3,18 +3,20 @@ from decimal import Decimal
 
 import pytest
 
-from core.ingest.etl import RowError, clean_money, clean_tier, clean_ts
+from core.ingest.etl import RowError, clean_enum, clean_money, clean_ts
+
+TIERS = ["Standard", "Silver", "Gold", "Platinum"]
 
 
 @pytest.mark.parametrize("raw,expected", [("Gold", "Gold"), ("gold ", "Gold"), ("GOLD", "Gold"),
                                           (" platinum", "Platinum")])
 def test_clean_tier_normalizes(raw, expected):
-    assert clean_tier(raw) == expected
+    assert clean_enum(raw, TIERS, "tier") == expected
 
 
 def test_clean_tier_rejects_unknown():
-    with pytest.raises(RowError):
-        clean_tier("Bronze")
+    with pytest.raises(RowError, match="invalid tier 'Bronze'"):
+        clean_enum("Bronze", TIERS, "tier")
 
 
 def test_clean_ts_formats():

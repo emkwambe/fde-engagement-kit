@@ -14,15 +14,11 @@ FROM ${PYTHON_IMAGE} AS build
 RUN python -m venv /venv && /venv/bin/pip install --no-cache-dir \
       fastapi==0.162.3 starlette==1.10.0 pydantic==2.14.3 pydantic-core==2.50.4 uvicorn==0.54.0 pyyaml==6.0.3
 
-# ---------------------------------------------------------------- data: run the seed generator once, keep only its output
-FROM build AS data
-RUN /venv/bin/pip install --no-cache-dir python-dotenv==1.2.4
-WORKDIR /src
-COPY core/__init__.py core/__init__.py
-COPY core/config/ core/config/
-COPY core/ingest/__init__.py core/ingest/seed.py core/ingest/
-COPY engagements/demo-logistics/engagement.yaml engagements/demo-logistics/engagement.yaml
-RUN /venv/bin/python -m core.ingest.seed --engagement demo-logistics
+# ---------------------------------------------------------------- data: run the engagement's seed once, keep only its output
+# The generator is engagement-owned and standard-library only (Sprint 01, kit-generic), so plain python runs it.
+FROM ${PYTHON_IMAGE} AS data
+COPY engagements/demo-logistics/extensions/seed.py /src/seed.py
+RUN python /src/seed.py /src/tables
 
 # ---------------------------------------------------------------- runtime
 FROM ${PYTHON_IMAGE} AS runtime
@@ -35,7 +31,7 @@ ENV PATH=/venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 BUILD_SHA=
 RUN apt-get update && apt-get -y upgrade --no-install-recommends && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 COPY --from=build /venv /venv
-COPY --from=data /src/engagements/demo-logistics/data/tables/shipments.csv /data/tables/shipments.csv
+COPY --from=data /src/tables/shipments.csv /data/tables/shipments.csv
 # Same folder depth as in the repo (app.py looks two levels up for its defaults).
 WORKDIR /srv/services/mock-erp
 COPY services/mock-erp/app.py services/mock-erp/openapi.yaml ./

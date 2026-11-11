@@ -39,7 +39,6 @@ def search_documents_tool(cfg: EngagementConfig, embeddings: Embeddings, dsn: st
 
     return StructuredTool.from_function(
         func=search_documents, name="search_documents", args_schema=SearchArgs,
-        description=("Search the customer's policy documents (SLA, credits, claims, escalation, ...). "
-                     "Returns passages with a 'ref' label; cite facts as [ref]."),
+        description=cfg.retrieval.tool_description,  # per engagement: the model chooses tools by description
         metadata={"source": "rag", "method": "SEARCH", "path": "kb.chunks", "requires_approval": False},
     )

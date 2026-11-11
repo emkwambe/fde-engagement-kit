@@ -52,7 +52,7 @@ Color key: blue = **INTENT (Why?)**, purple = **CONTEXT (When / where?)**, green
 > test success
 > containers success
 > The first run, 43034563850, ended "failure": secrets success, test success, containers failure (trivy found 7
-> CRITICAL CVEs). Fixed in commit 37a85e0; the second run, 43035141379, is green. The PR made the failure cheap:
+> CRITICAL CVEs). Fixed in commit 57a3f59 (CI tested it as 37a85e0, GitHub's merge of the PR into master); the second run, 43035141379, is green. The PR made the failure cheap:
 > it happened on a branch, before master.
 > ```
 

@@ -48,13 +48,11 @@
   </div>
   <div class="row examples" style="margin-top:10px">
     <span class="meta">Try:</span>
-    <button class="ghost" type="button">Where is shipment SHP-2207?</button>
-    <button class="ghost" type="button">What SLA credit does a Gold customer get for 3 days late?</button>
-    <button class="ghost" type="button">Open a credit ticket for ORD-1043 for the amount the policy allows.</button>
+    <!-- Example questions come from engagement.yaml (engagement.examples) via GET /engagement (Sprint 01, kit-generic) -->
   </div>
   <div id="log"></div>
   <form id="form">
-    <textarea id="message" placeholder="Ask about orders, shipments or policy..." required></textarea>
+    <textarea id="message" placeholder="Ask a question..." required></textarea>
     <div class="row" style="margin-top:8px"><button id="send" type="submit">Send</button></div>
   </form>
 </main>
@@ -124,7 +122,16 @@ $("form").onsubmit = async (ev) => {
   finally { $("send").disabled = false; }
 };
 $("newThread").onclick = () => { $("thread").value = newId(); log.innerHTML = ""; };
-document.querySelectorAll(".examples button").forEach((b) => b.onclick = () => { $("message").value = b.textContent; });
+call("/engagement").then((e) => {
+  document.title = `${e.customer} - FDE Agent Console`;
+  const box = document.querySelector(".examples");
+  for (const text of e.examples) {
+    const b = document.createElement("button");
+    b.className = "ghost"; b.type = "button"; b.textContent = text;  // textContent: config text is never parsed as HTML
+    b.onclick = () => { $("message").value = text; };
+    box.appendChild(b);
+  }
+}).catch(() => {});
 
 call("/health").then((h) => {
   $("health").textContent = `${h.engagement} - model: ${h.llm_provider} - checkpoints: ${h.checkpointer} - ${h.status}`;

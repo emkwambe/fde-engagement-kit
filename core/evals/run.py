@@ -40,7 +40,7 @@ import httpx
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from core.agent.graph import PROMPT_VERSION, SYSTEM_PROMPT, AgentTurn, agent_model, agent_tools, build_agent, run_config
+from core.agent.graph import AgentTurn, agent_model, agent_tools, build_agent, run_config, system_prompt
 from core.agent.service import AgentService
 from core.config import load_engagement, resolve_path
 from core.config.schema import EngagementConfig
@@ -81,12 +81,12 @@ def mask_ids(text: str) -> str:
 
 def prompt_version(cfg: EngagementConfig) -> str:
     """The label of the agent prompt this run used. Resumed results must come from the same label."""
-    return PROMPT_VERSION
+    return system_prompt(cfg)[1]
 
 
 def prompt_sha(cfg: EngagementConfig) -> str:
     """Fingerprint of the exact prompt text the model saw, so a version label can be checked, not just trusted."""
-    return hashlib.sha256(SYSTEM_PROMPT.format(customer=cfg.engagement.customer).encode()).hexdigest()[:12]
+    return hashlib.sha256(system_prompt(cfg)[0].format(customer=cfg.engagement.customer).encode()).hexdigest()[:12]
 
 
 class PreflightError(RuntimeError):
