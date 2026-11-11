@@ -21,7 +21,9 @@ class EngagementInfo(_Strict):
 class LLMConfig(_Strict):
     provider: Literal["openai", "anthropic", "azure_openai", "bedrock", "vertex", "fake"] = "openai"
     model: str
-    temperature: float = Field(0.0, ge=0, le=2)
+    # None = don't send it; the model uses its own default. Some models (e.g. gpt-6-luna) reject the
+    # parameter outright with HTTP 400, so it is opt-in per engagement (DC-016).
+    temperature: float | None = Field(None, ge=0, le=2)
     max_steps: int = Field(8, ge=1, le=50)
 
 

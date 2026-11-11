@@ -67,6 +67,7 @@ def get_chat_model(cfg: LLMConfig) -> BaseChatModel:
     if cfg.provider == "openai":
         from langchain_openai import ChatOpenAI
 
+        # temperature=None is left out of the request entirely (some models reject the parameter).
         return ChatOpenAI(model=cfg.model, temperature=cfg.temperature)
     raise NotImplementedError(
         f"Provider '{cfg.provider}' is planned (ADR-005). Install its langchain package and add a branch here."

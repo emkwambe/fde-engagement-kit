@@ -160,7 +160,9 @@ def _turn(agent: CompiledStateGraph, config: RunnableConfig, seen: int) -> Agent
         pending = [call for i in snapshot.interrupts for call in i.value.get("tool_calls", [])]
         return AgentTurn(thread_id, "needs_approval", pending=pending, steps=steps)
     last = messages[-1] if messages else None
-    answer = str(last.content) if isinstance(last, AIMessage) else ""
+    # .text joins the text blocks. Some models (e.g. gpt-6-luna) return content as a LIST of blocks
+    # ([{"type": "text", "text": ...}, ...]); str(content) would show users that raw list (DC-016).
+    answer = last.text if isinstance(last, AIMessage) else ""
     return AgentTurn(thread_id, "done", answer=answer, steps=steps)
 
 

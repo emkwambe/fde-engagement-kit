@@ -6,7 +6,7 @@ engagement:
 llm:
   provider: openai
   model: ${LLM_MODEL}
-  temperature: 0
+  # temperature: 0          # optional; leave unset unless the model supports it (gpt-6-luna does not, DC-016)
   max_steps: 8
 
 embeddings:

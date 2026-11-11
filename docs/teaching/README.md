@@ -67,7 +67,7 @@ Colors show on GitHub. In VS Code's Markdown preview (Ctrl+Shift+V) the boxes st
 | 12 | [The agent graph](12-agent-graph.md) | LangGraph: agent loop, routing, approval interrupt, Postgres checkpoints | 2 |
 | 13 | [Asking permission](13-asking-permission.md) | Approval API, atomic decisions, audit trail, agent console | 2 |
 | 14 | [Guardrails](14-guardrails.md) | PII redaction, prompt-injection filter, guarded tools, input blocking | 3 |
-| 15 | Measuring quality | Golden-set evals, scoring, the first real-model run | 3 (next) |
+| 15 | [Measuring quality](15-measuring-quality.md) | Golden-set evals, six checks, fake vs real, the gate, quota-aware resumable runs, the story of the first three real runs | 3 |
 
 ## How to use these notes
 

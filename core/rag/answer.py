@@ -134,6 +134,6 @@ def answer_question(
     results = [replace(r, text=clean_text(r.text, cfg.guardrails)) for r in results]
     messages = build_messages(question, results, cfg.engagement.customer)
     reply = chat.invoke(messages)
-    text = reply.content if isinstance(reply.content, str) else str(reply.content)
+    text = reply.text  # joins text blocks; never str(list) for models that return content blocks (DC-016)
 
     return Answer(answer=text.strip(), citations=_citations(results), confidence=best_similarity)

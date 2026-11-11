@@ -4,7 +4,8 @@ __pycache__/
 *.pyc
 .terraform/
 *.tfstate*
-engagements/*/evals/reports/*.md
+# eval reports: real-model runs are committed (trend tracking, docs/09 section 2.4); fake-model runs are not
+engagements/*/evals/reports/*-fake-*
 !engagements/*/evals/reports/.gitkeep
 .pytest_cache/
 .mypy_cache/

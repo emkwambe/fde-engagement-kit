@@ -64,16 +64,30 @@ def list_document_files(cfg: EngagementConfig) -> list[Path]:
 @dataclass
 class IngestStats:
     documents_seen: int = 0
-    documents_skipped: int = 0   # unchanged since last run (same content hash)
+    documents_skipped: int = 0   # unchanged since last run (same content hash and embedding model)
     chunks_upserted: int = 0
 
 
-def _stored_hash(conn: psycopg.Connection, doc_id: str, engagement: str) -> str | None:
+def embedding_signature(cfg: EngagementConfig) -> str:
+    """Which model made the vectors, e.g. 'openai/text-embedding-3-small/1536' (Day 3).
+    Vectors from different models live in different 'spaces': comparing them gives nonsense scores."""
+    e = cfg.embeddings
+    return f"{e.provider}/{e.model}/{e.dimensions}"
+
+
+def stored_signatures(conn: psycopg.Connection, engagement: str) -> set[str]:
+    """Embedding signatures of the documents currently stored for an engagement (empty = nothing ingested)."""
+    rows = conn.execute("SELECT DISTINCT coalesce(metadata->>'embedding', 'unknown') FROM kb.documents "
+                        "WHERE engagement = %s", (engagement,)).fetchall()
+    return {r[0] for r in rows}
+
+
+def _stored_state(conn: psycopg.Connection, doc_id: str, engagement: str) -> tuple[str, str] | None:
     row = conn.execute(
-        "SELECT content_hash FROM kb.documents WHERE id = %s AND engagement = %s",
+        "SELECT content_hash, coalesce(metadata->>'embedding', '') FROM kb.documents WHERE id = %s AND engagement = %s",
         (doc_id, engagement),
     ).fetchone()
-    return row[0] if row else None
+    return (row[0], row[1]) if row else None
 
 
 def _replace_document(
@@ -86,6 +100,7 @@ def _replace_document(
     doc_hash: str,
     chunks: list[Chunk],
     vectors: list[list[float]],
+    signature: str,
 ) -> None:
     """Delete the old version (chunks go with it via ON DELETE CASCADE) and insert the new one.
     Rows are keyed by (engagement, id), so other engagements' copies of the same file are untouched."""
@@ -93,7 +108,7 @@ def _replace_document(
     conn.execute(
         "INSERT INTO kb.documents (id, engagement, title, source_uri, content_hash, metadata) "
         "VALUES (%s, %s, %s, %s, %s, %s)",
-        (doc_id, engagement, title, source_uri, doc_hash, json.dumps({"chunks": len(chunks)})),
+        (doc_id, engagement, title, source_uri, doc_hash, json.dumps({"chunks": len(chunks), "embedding": signature})),
     )
     rows = [
         (
@@ -122,7 +137,8 @@ def ingest_documents(conn: psycopg.Connection, cfg: EngagementConfig, embeddings
 
     Requirements (checked by tests):
       1. document id = file name (e.g. 'sla-policy.md'); engagement = cfg.engagement.name.
-      2. Unchanged documents (same content hash as stored) are skipped: no re-embedding.
+      2. Unchanged documents (same content hash AND same embedding model as stored) are skipped:
+         no re-embedding. Switching embedding model (e.g. FAKE_LLM=1 -> 0) re-embeds everything (Day 3).
       3. Changed documents replace ALL their old chunks (no stale chunks left behind).
       4. chunk id = f"{document_id}#{ordinal}"; store section, ordinal, text, embedding, content_hash.
       5. Embed chunks in batches (embeddings.embed_documents), not one API call per chunk.
@@ -132,6 +148,7 @@ def ingest_documents(conn: psycopg.Connection, cfg: EngagementConfig, embeddings
     stats = IngestStats()
     engagement = cfg.engagement.name
     expected_dims = cfg.embeddings.dimensions
+    signature = embedding_signature(cfg)
 
     for path in list_document_files(cfg):
         stats.documents_seen += 1
@@ -139,7 +156,7 @@ def ingest_documents(conn: psycopg.Connection, cfg: EngagementConfig, embeddings
         title, text = read_document(path)
         doc_hash = content_hash(text)
 
-        if _stored_hash(conn, doc_id, engagement) == doc_hash:
+        if _stored_state(conn, doc_id, engagement) == (doc_hash, signature):
             stats.documents_skipped += 1
             continue
 
@@ -160,6 +177,7 @@ def ingest_documents(conn: psycopg.Connection, cfg: EngagementConfig, embeddings
             doc_hash=doc_hash,
             chunks=chunks,
             vectors=vectors,
+            signature=signature,
         )
         stats.chunks_upserted += len(chunks)
 

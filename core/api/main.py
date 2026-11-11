@@ -1,7 +1,7 @@
 """HTTP API (D-09).  Run locally:  uv run uvicorn core.api.main:app --port 8000   (or .\\tasks.ps1 api)
 
 Endpoints
-  GET  /health                          status, engagement, model provider, database, checkpointer
+  GET  /health                          status, engagement, model provider, database, checkpointer, embeddings_match
   POST /chat                            the agent: answer, or a write paused for approval   (Day 2)
   POST /ask                             documents only: cited RAG answer                     (Day 1)
   GET  /approvals                       writes waiting for a human decision
@@ -35,6 +35,7 @@ from core.agent.graph import agent_model, agent_tools, build_agent
 from core.agent.service import AgentService
 from core.config import load_engagement
 from core.db.connection import connect, database_url
+from core.ingest.documents import embedding_signature, stored_signatures
 from core.llm.factory import get_chat_model, get_embeddings
 
 UI_PAGE = Path(__file__).resolve().parents[2] / "ui" / "index.html"
@@ -146,15 +147,19 @@ def _service() -> AgentService:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    db_ok = True
+    cfg = state["cfg"]
+    db_ok, vectors_ok = True, False
     try:
         with connect(vector=False) as conn:
-            conn.execute("SELECT 1")
+            # Day 3: the stored document vectors must come from the same embedding model as the queries,
+            # otherwise search silently returns nonsense (e.g. after switching FAKE_LLM).
+            vectors_ok = stored_signatures(conn, cfg.engagement.name) == {embedding_signature(cfg)}
     except Exception:
         db_ok = False
-    ok = db_ok and state["checkpointer"] == "postgres"
-    return {"status": "ok" if ok else "degraded", "engagement": state["cfg"].engagement.name,
-            "llm_provider": state["cfg"].llm.provider, "database": db_ok, "checkpointer": state["checkpointer"]}
+    ok = db_ok and vectors_ok and state["checkpointer"] == "postgres"
+    return {"status": "ok" if ok else "degraded", "engagement": cfg.engagement.name,
+            "llm_provider": cfg.llm.provider, "database": db_ok, "checkpointer": state["checkpointer"],
+            "embeddings_match": vectors_ok}
 
 
 @app.post("/chat", response_model=TurnResponse)

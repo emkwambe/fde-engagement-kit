@@ -70,7 +70,7 @@ def main() -> None:
         if args.history:
             for m in agent.get_state(run_config(cfg, thread)).values.get("messages", []):
                 calls = getattr(m, "tool_calls", None)
-                print(f"[{m.type}] {short(str(m.content) or json.dumps(calls), 200)}")
+                print(f"[{m.type}] {short(m.text or json.dumps(calls), 200)}")
             return
         try:
             if args.approve or args.reject is not None:
