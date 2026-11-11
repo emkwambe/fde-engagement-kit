@@ -1,0 +1,420 @@
+openapi: 3.1.0
+info:
+  title: Northwind Legacy ERP (mock)
+  description: 'Shipment tracking and claims tickets. Authenticate with `Authorization:
+    Bearer <token>`.'
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      tags:
+      - system
+      summary: Health
+      operationId: health
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /shipments/{shipment_id}:
+    get:
+      tags:
+      - shipments
+      summary: Get the latest carrier status of one shipment
+      operationId: getShipment
+      parameters:
+      - name: shipment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Shipment Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shipment'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /shipments:
+    get:
+      tags:
+      - shipments
+      summary: List shipments, filtered by order or status text
+      operationId: listShipments
+      parameters:
+      - name: order_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Exact order id, e.g. ORD-1043
+          title: Order Id
+        description: Exact order id, e.g. ORD-1043
+      - name: status_contains
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Case-insensitive text in last_status
+          title: Status Contains
+        description: Case-insensitive text in last_status
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Shipment'
+                title: Response Listshipments
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /tickets:
+    post:
+      tags:
+      - tickets
+      summary: 'Open a credit/claims ticket (a WRITE action: agents must get approval
+        first)'
+      operationId: createTicket
+      parameters:
+      - name: x-client
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Client
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /tickets/{ticket_id}:
+    get:
+      tags:
+      - tickets
+      summary: Get one ticket
+      operationId: getTicket
+      parameters:
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Ticket Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    Health:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+        shipments_loaded:
+          type: integer
+          title: Shipments Loaded
+        tickets:
+          type: integer
+          title: Tickets
+      type: object
+      required:
+      - status
+      - shipments_loaded
+      - tickets
+      title: Health
+    Shipment:
+      properties:
+        shipment_id:
+          type: string
+          title: Shipment Id
+          examples:
+          - SHP-2207
+        order_id:
+          type: string
+          title: Order Id
+          examples:
+          - ORD-1207
+        carrier:
+          type: string
+          title: Carrier
+        origin:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Origin
+        destination:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Destination
+        last_scan_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Scan At
+        last_status:
+          type: string
+          title: Last Status
+          description: Free-text status from the last carrier scan
+      type: object
+      required:
+      - shipment_id
+      - order_id
+      - carrier
+      - last_status
+      title: Shipment
+    Ticket:
+      properties:
+        order_id:
+          type: string
+          pattern: ^ORD-\d+$
+          title: Order Id
+          examples:
+          - ORD-1043
+        customer_id:
+          type: string
+          pattern: ^C-\d+$
+          title: Customer Id
+          examples:
+          - C-007
+        days_late:
+          type: integer
+          maximum: 60.0
+          minimum: 1.0
+          title: Days Late
+        credit_percent:
+          type: number
+          maximum: 35.0
+          exclusiveMinimum: 0.0
+          title: Credit Percent
+          description: Never above the Platinum cap of 35%
+        credit_amount_usd:
+          type: number
+          maximum: 100000.0
+          exclusiveMinimum: 0.0
+          title: Credit Amount Usd
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Reason
+        priority:
+          type: string
+          enum:
+          - P1
+          - P2
+          - P3
+          - P4
+          title: Priority
+          default: P3
+        ticket_id:
+          type: string
+          title: Ticket Id
+          examples:
+          - TCK-0001
+        status:
+          type: string
+          enum:
+          - open
+          - approved
+          - rejected
+          - closed
+          title: Status
+          default: open
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        created_by:
+          type: string
+          title: Created By
+          description: Which client created it (from the X-Client header)
+      type: object
+      required:
+      - order_id
+      - customer_id
+      - days_late
+      - credit_percent
+      - credit_amount_usd
+      - reason
+      - ticket_id
+      - created_at
+      - created_by
+      title: Ticket
+    TicketCreate:
+      properties:
+        order_id:
+          type: string
+          pattern: ^ORD-\d+$
+          title: Order Id
+          examples:
+          - ORD-1043
+        customer_id:
+          type: string
+          pattern: ^C-\d+$
+          title: Customer Id
+          examples:
+          - C-007
+        days_late:
+          type: integer
+          maximum: 60.0
+          minimum: 1.0
+          title: Days Late
+        credit_percent:
+          type: number
+          maximum: 35.0
+          exclusiveMinimum: 0.0
+          title: Credit Percent
+          description: Never above the Platinum cap of 35%
+        credit_amount_usd:
+          type: number
+          maximum: 100000.0
+          exclusiveMinimum: 0.0
+          title: Credit Amount Usd
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Reason
+        priority:
+          type: string
+          enum:
+          - P1
+          - P2
+          - P3
+          - P4
+          title: Priority
+          default: P3
+      type: object
+      required:
+      - order_id
+      - customer_id
+      - days_late
+      - credit_percent
+      - credit_amount_usd
+      - reason
+      title: TicketCreate
+      description: Fields required by the claims process (claims-process.md#required-ticket-fields).
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

@@ -15,7 +15,8 @@
 param(
   [Parameter(Position = 0)]
   [ValidateSet('help', 'setup', 'up', 'down', 'migrate', 'seed', 'ingest', 'eval', 'demo',
-               'test', 'lint', 'kind-up', 'kind-down', 'ingest-remote', 'check-tools')]
+               'test', 'lint', 'kind-up', 'kind-down', 'ingest-remote', 'check-tools',
+               'erp', 'erp-spec')]
   [string]$Task = 'help',
 
   [string]$Engagement = 'demo-logistics'
@@ -51,20 +52,23 @@ Import-DotEnv
 switch ($Task) {
   'help' {
     Get-Help $PSCommandPath -Detailed | Out-Host
-    Write-Host @'
-Tasks:
-  check-tools    Verify required CLIs are installed
-  setup          Create .venv and install dependencies with uv          (Day 1)
-  up / down      Start / stop the local Docker Compose stack
-  migrate        Create database schemas, tables, read-only role        (Day 1)
-  seed           Generate synthetic data with fixed seeds                (Day 1)
-  ingest         ETL tables + embed documents into pgvector             (Day 1)
-  eval           Run the golden-set evaluation, write report            (Day 3)
-  demo           up + migrate + seed + ingest + start API at http://localhost:8000/docs
-  test / lint    pytest / ruff + mypy
-  kind-up/-down  Create / delete the local Kubernetes cluster            (Day 4)
-  ingest-remote  Run ingestion as a Cloud Run job                       (Day 4)
-'@
+    $helpLines = @(
+      'Tasks:',
+      '  check-tools    Verify required CLIs are installed',
+      '  setup          Create .venv and install dependencies with uv          (Day 1)',
+      '  up / down      Start / stop the local Docker Compose stack',
+      '  migrate        Create database schemas, tables, read-only role        (Day 1)',
+      '  seed           Generate synthetic data with fixed seeds                (Day 1)',
+      '  ingest         ETL tables + embed documents into pgvector             (Day 1)',
+      '  eval           Run the golden-set evaluation, write report            (Day 3)',
+      '  demo           up + migrate + seed + ingest + start API at http://localhost:8000/docs',
+      '  test / lint    pytest / ruff + mypy',
+      '  erp            Run the mock ERP (legacy system) at http://localhost:8100 (Day 2)',
+      '  erp-spec       Export the mock ERP''s OpenAPI contract to services/mock-erp/openapi.yaml',
+      '  kind-up/-down  Create / delete the local Kubernetes cluster            (Day 4)',
+      '  ingest-remote  Run ingestion as a Cloud Run job                       (Day 4)'
+    )
+    $helpLines | ForEach-Object { Write-Host $_ }
   }
   'check-tools' {
     $checks = 'python --version', 'uv --version', 'docker compose version', 'kind version',
@@ -103,6 +107,11 @@ Tasks:
       Invoke-Step "Load $img" { kind load docker-image $img --name fde }
     }
   }
+  'erp' {
+    Write-Host 'Mock ERP: http://localhost:8100/docs  (Ctrl+C to stop)' -ForegroundColor Green
+    uv run python services/mock-erp/app.py
+  }
+  'erp-spec' { Invoke-Step 'Export mock ERP OpenAPI spec' { uv run python services/mock-erp/app.py export-spec } }
   'kind-down' { Invoke-Step 'Delete kind cluster' { kind delete cluster --name fde } }
   'ingest-remote' {
     Assert-EngagementExists
