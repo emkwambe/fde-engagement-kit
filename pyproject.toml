@@ -17,6 +17,8 @@ dependencies = [
   "pypdf>=5.0",
   "httpx>=0.27",
   "python-dotenv>=1.0",
+  "langgraph>=1.0",
+  "langgraph-checkpoint-postgres>=3.0",
 ]
 
 [dependency-groups]

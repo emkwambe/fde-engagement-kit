@@ -1,3 +1,8 @@
-* text=auto
-*.ps1 text eol=crlf
-*.sh  text eol=lf
+# Keep line endings consistent across Windows and Linux (DC-013).
+# Text files are stored and checked out with LF; Windows tools (VS Code, PowerShell 7) handle LF fine.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
+*.xlsx binary
