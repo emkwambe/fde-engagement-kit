@@ -39,6 +39,12 @@ variable "db_tier" {
   default     = "db-g1-small"
 }
 
+variable "api_invokers" {
+  description = "IAM members allowed to call the API, e.g. [\"user:you@example.com\"]. The API is never public (DC-031)."
+  type        = list(string)
+  default     = []
+}
+
 variable "github_repository" {
   description = "owner/repo allowed to deploy through Workload Identity Federation"
   type        = string

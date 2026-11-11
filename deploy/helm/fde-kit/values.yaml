@@ -31,6 +31,8 @@ secrets:
   agentRoPassword: agent_ro
   erpApiToken: dev-token
   adminToken: ""             # empty = /ingest and /eval disabled (fail closed)
+  approverToken: ""          # set it anywhere but a laptop: empty = anyone who reaches the API can approve writes
+  chatToken: ""              # empty = /chat and /ask open (they spend model quota)
   openaiApiKey: ""
 
 # Postgres inside the cluster: for kind only. In the cloud the database is managed (Cloud SQL), so set enabled: false

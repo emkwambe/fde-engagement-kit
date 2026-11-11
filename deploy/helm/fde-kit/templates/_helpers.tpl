@@ -40,6 +40,10 @@ capabilities: { drop: ["ALL"] }
   valueFrom: { secretKeyRef: { name: {{ include "fde.secretName" . }}, key: erp-api-token } }
 - name: ADMIN_TOKEN
   valueFrom: { secretKeyRef: { name: {{ include "fde.secretName" . }}, key: admin-token, optional: true } }
+- name: APPROVER_TOKEN
+  valueFrom: { secretKeyRef: { name: {{ include "fde.secretName" . }}, key: approver-token, optional: true } }
+- name: CHAT_TOKEN
+  valueFrom: { secretKeyRef: { name: {{ include "fde.secretName" . }}, key: chat-token, optional: true } }
 - name: ERP_API_URL
   value: "http://{{ .Release.Name }}-mock-erp:{{ .Values.mockErp.port }}"
 {{- if .Values.postgres.enabled }}

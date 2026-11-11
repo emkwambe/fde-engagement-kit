@@ -104,7 +104,7 @@ switch ($Task) {
     Invoke-Step "Build and start the stack ($env:BUILD_SHA)" { docker compose up -d --build --wait --wait-timeout 300 api }
     $port = if ($env:API_PORT) { $env:API_PORT } else { '8000' }
     Invoke-RestMethod "http://localhost:$port/health" | ConvertTo-Json -Compress | Write-Host
-    Write-Host "Agent console: http://localhost:$port   API docs: http://localhost:$port/docs   Stop: .	asks.ps1 stack-down" -ForegroundColor Green
+    Write-Host "Agent console: http://localhost:$port   API docs: http://localhost:$port/docs   Stop: .\tasks.ps1 stack-down" -ForegroundColor Green
   }
   'api' {
     Write-Host 'Agent console: http://localhost:8000   API docs: http://localhost:8000/docs  (Ctrl+C to stop)' -ForegroundColor Green
@@ -118,7 +118,7 @@ switch ($Task) {
   }
   'kind-up' {
     Invoke-Step 'Create kind cluster' { kind create cluster --name fde --wait 120s }
-    foreach ($img in 'fde-api:local', 'fde-mock-erp:local') {  # build them first: .	asks.ps1 images
+    foreach ($img in 'fde-api:local', 'fde-mock-erp:local') {  # build them first: .\tasks.ps1 images
       Invoke-Step "Load $img" { kind load docker-image $img --name fde }
     }
   }

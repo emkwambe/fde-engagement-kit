@@ -220,6 +220,46 @@ Before you start: Postgres up (`.\tasks.ps1 up`), mock ERP running (`.\tasks.ps1
 > after a reason of 3+ characters is typed, and the API enforces the same rule (HTTP 422).
 > ```
 
+### Practicum 7 (Sprint 01b: who may press Approve?)
+
+> [!NOTE]
+> **INTENT - Why?** "Once deployed, can a stranger approve a credit ticket just by calling the API?"
+
+> [!IMPORTANT]
+> **CONTEXT - When / where?** Review finding F-R1 (DC-031). Before Sprint 01b anyone who could reach `/approvals/{thread}/approve` could run a paused write, with any name in "by". Now, when the server has `APPROVER_TOKEN`, approval routes need the header `X-Approver-Token`. API started with `$env:APPROVER_TOKEN = 'dev-reviewer-token'` on port 8001; the console has a "Reviewer token" field that sends it.
+
+> [!TIP]
+> **ACTION - How?**
+>
+> ```powershell
+> $base = 'http://localhost:8001'
+> $null = Invoke-RestMethod "$base/chat" -Method Post -ContentType 'application/json' -Body (@{ thread_id = 'review-demo-1'; message = 'Open a credit ticket for ORD-1043 for the amount the policy allows.' } | ConvertTo-Json)
+> try { Invoke-RestMethod "$base/approvals/review-demo-1/approve" -Method Post -ContentType 'application/json' -Body (@{ by = 'mallory' } | ConvertTo-Json) } catch { "no token -> " + $_.Exception.Response.StatusCode.value__ + " " + $_.ErrorDetails.Message }
+> $r = Invoke-RestMethod "$base/approvals/review-demo-1/reject" -Method Post -ContentType 'application/json' -Headers @{ 'X-Approver-Token' = 'dev-reviewer-token' } -Body (@{ by = 'team-lead'; reason = 'practicum only, no ticket wanted' } | ConvertTo-Json)
+> "with token -> $($r.status)"
+> (Invoke-RestMethod "$base/threads/review-demo-1/audit" -Headers @{ 'X-Approver-Token' = 'dev-reviewer-token' }) | Where-Object event -eq 'approval_decided' | ForEach-Object { $_.detail | Select-Object approved, by, token_verified | Format-Table -AutoSize }
+> ```
+
+> [!WARNING]
+> **RESULT - What happened, and what does it mean?**
+>
+> ```text
+> no token -> 401
+> {
+>   "detail": "Missing or invalid reviewer token (X-Approver-Token)"
+> }
+> with token -> done
+>
+> approved by        token_verified
+> -------- --        --------------
+>    False team-lead           True
+> "mallory" was refused before the graph was touched, so the write stayed paused. The reviewer's decision went
+> through, and the audit row says token_verified True. Without APPROVER_TOKEN (a laptop) nothing changes, but
+> /health shows "approvals_auth": false and audit rows say token_verified false, so an open setup is visible.
+> The token proves "someone holding the reviewer token", not WHICH person: "by" is still typed in. Real
+> per-person identity needs SSO (deferred idea A in docs/16).
+> ```
+
 ## Teach-back check
 
 <details><summary>1. Why does the API return "needs_approval" immediately instead of waiting for the human?</summary>
@@ -240,6 +280,11 @@ In: who asked, every tool call with its arguments, tool results (truncated), the
 <details><summary>4. Why do the API and the CLI both go through AgentService?</summary>
 
 So the rules (record the pause, claim the decision, audit every step) live in one place. A second door that skipped them would be an unaudited way to approve writes.
+</details>
+
+<details><summary>Sprint 01b. Why does the reviewer token travel in X-Approver-Token and not in Authorization?</summary>
+
+On Cloud Run the API is reached through IAM (`gcloud run services proxy`), which uses the Authorization header for Google's identity token. Two different credentials cannot share one header, so each app token has its own: X-Approver-Token, X-Chat-Token, X-Admin-Token.
 </details>
 
 ## Interview line

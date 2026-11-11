@@ -26,7 +26,7 @@ Details and evidence: [sprint report](docs/sprints/reports/sprint-01-report.md),
 | Write that needs approval | `createTicket` (credit ticket) | `createDispatch` (send a technician) |
 | Folder | [engagements/demo-logistics](engagements/demo-logistics/) | [engagements/coastline-hvac](engagements/coastline-hvac/) |
 | Real-model eval | gpt-6-luna, prompt agent-v1: 18/18 finished cases pass, 9 not run (quota) -> [latest report](engagements/demo-logistics/evals/reports/2026-11-11-0811-gpt-6-luna-cadb61d.md) | Not run yet (quota) |
-| Zero-core-change proof | - | `git diff --stat kit-generic..HEAD -- core/` is empty ([note 21](docs/teaching/21-second-engagement.md)) |
+| Zero-core-change proof | - | `git diff --stat kit-generic..e69d0b6 -- core/` is empty: e69d0b6 is the commit that added engagement #2 ([note 21](docs/teaching/21-second-engagement.md)). Later core commits are generic review fixes (DC-031) |
 
 ## Architecture
 

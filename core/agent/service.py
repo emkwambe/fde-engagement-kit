@@ -57,7 +57,10 @@ class AgentService:
         self._record(turn, trace, first={"event": "user_message", "detail": {"user": user, **self._text(message)}})
         return turn
 
-    def decide(self, thread_id: str, *, approved: bool, by: str, reason: str = "") -> AgentTurn:
+    def decide(self, thread_id: str, *, approved: bool, by: str, reason: str = "",
+               token_verified: bool = False) -> AgentTurn:
+        """token_verified: the caller presented a valid reviewer token (APPROVER_TOKEN). Recorded in the audit row so an
+        auditor can tell a token-checked decision from one made while approvals were open (Sprint 01b, F-R1)."""
         trace = current_trace_id()
         claimed = self._claim(thread_id, approved, by)
         try:
@@ -67,7 +70,8 @@ class AgentService:
             raise
         APPROVALS.labels("approved" if approved else "rejected").inc(len(claimed) or 1)
         decision = {"event": "approval_decided",
-                    "detail": {"approved": approved, "by": by, "reason": reason, "approval_ids": claimed}}
+                    "detail": {"approved": approved, "by": by, "reason": reason, "approval_ids": claimed,
+                               "token_verified": token_verified}}
         self._record(turn, trace, first=decision)
         return turn
 

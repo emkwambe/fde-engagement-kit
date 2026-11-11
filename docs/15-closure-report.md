@@ -21,7 +21,7 @@ applying it is the sponsor's step).
 | ID | Criterion | Target | Actual | Met? |
 |---|---|---|---|---|
 | SC-01 | Skills at target | >= 90% | After column drafted for the author to confirm ([skills matrix](03-skills-matrix.md)) | Sponsor to judge |
-| SC-02 | Reuse proven | 0 core changes for engagement #2 | 0 lines (`git diff kit-generic..HEAD -- core/`), engagement #2 runs end to end | **Met** |
+| SC-02 | Reuse proven | 0 core changes for engagement #2 | 0 lines (`git diff kit-generic..e69d0b6 -- core/`, e69d0b6 = the engagement #2 commit); engagement #2 runs end to end. Core changed later only for the generic security fix of review finding F-R1 | **Met** |
 | SC-03 | Eval score | >= 85%, CI gate | Real: 19/19 finished cases pass, 8 of 27 not run (quota); CI runs the fake eval as a harness check, the real gate is a manual workflow | **Partly** (not measured on a complete run) |
 | SC-04 | Deployed | Cloud Run URL via Terraform | Terraform validated, runbook and deploy workflow ready; not applied (rule 5) | **Not met** (NEEDS HUMAN) |
 | SC-05 | Reproducible | `.\tasks.ps1 demo` <= 15 min | Same steps on a clean CI runner, image builds included: about 3 min (run 43035141379); not timed on a clean laptop | **Partly** |
@@ -110,6 +110,8 @@ applying it is the sponsor's step).
 | Switching FAKE_LLM gave nonsense search scores | Vectors from another embedding model | Embedding signature stored and checked (`/health`, eval preflight) |
 | First image build failed the CVE gate | Digest pin froze old Debian packages | OS upgrade in the runtime stage |
 | Laptop memory under the 3 GB floor | Browser + Docker VM | Container proofs moved to CI |
+| Sponsor review F-R1 (HIGH): the planned Cloud Run API was public, so anyone could approve writes or spend quota | Access was designed per endpoint (admin token) instead of per deployment; "by" is self-declared | API IAM-only with proxy access; reviewer and chat tokens; audit `token_verified` (DC-031, T-10, R-13) |
+| Sponsor review F-R2 (MEDIUM): `.\tasks.ps1` shown as ".TAB asks.ps1" in tasks.ps1 and the report | Edit scripts passed through a heredoc that collapsed `\\` before Python read `\t` as TAB | Fixed; repo scanned; test fails on TAB+"asks.ps1" or control characters (DC-032) |
 | Logistics content inside `core/` | Built for one customer first | Eleven gaps moved to config (DC-019..DC-029) |
 
 | What went well | What didn't | What I'd do differently next engagement |

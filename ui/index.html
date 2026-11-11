@@ -45,6 +45,9 @@
     <label>Thread <input id="thread" size="22"></label>
     <button class="ghost" id="newThread" type="button">New thread</button>
     <label>Your name <input id="user" size="14" value="reviewer"></label>
+    <!-- Sprint 01b: sent only if filled in; kept in this page's memory, never stored -->
+    <label>Reviewer token <input id="approverToken" type="password" size="12" autocomplete="off"></label>
+    <label>Chat token <input id="chatToken" type="password" size="12" autocomplete="off"></label>
   </div>
   <div class="row examples" style="margin-top:10px">
     <span class="meta">Try:</span>
@@ -78,8 +81,18 @@ function stepsHtml(steps) {
   return `<details><summary>Tool activity (${steps.length})</summary><pre>${esc(lines.join("\n"))}</pre></details>`;
 }
 
+function tokenHeaders(path) {
+  const h = {};
+  const approver = $("approverToken").value, chat = $("chatToken").value;
+  if (approver && (path.startsWith("/approvals") || path.startsWith("/threads"))) h["X-Approver-Token"] = approver;
+  if (chat && (path === "/chat" || path === "/ask")) h["X-Chat-Token"] = chat;
+  return h;
+}
+
 async function call(path, body) {
-  const res = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  const headers = tokenHeaders(path);
+  if (body) headers["Content-Type"] = "application/json";
+  const res = await fetch(path, body ? { method: "POST", headers, body: JSON.stringify(body) } : { headers });
   const data = await res.json();
   if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
   return data;
@@ -134,7 +147,8 @@ call("/engagement").then((e) => {
 }).catch(() => {});
 
 call("/health").then((h) => {
-  $("health").textContent = `${h.engagement} - model: ${h.llm_provider} - checkpoints: ${h.checkpointer} - ${h.status}`;
+  $("health").textContent = `${h.engagement} - model: ${h.llm_provider} - checkpoints: ${h.checkpointer} - ${h.status}` +
+    ` - approvals: ${h.approvals_auth ? "token required" : "OPEN (no token)"}`;
 }).catch(() => { $("health").textContent = "API not reachable"; });
 </script>
 </body>

@@ -287,6 +287,10 @@ After the 3b commit: see the Phase 3b checklist (the same command over `kit-gene
   event GitHub tests a merge commit of the PR into master, so 37a85e0 is that merge commit; the branch head was 57a3f59.
   Origin: assuming GITHUB_SHA = branch head. Caught by: the executor, comparing `git log` after the merge with the notes.
   Fixed in the notes and this report before the tag.
+- **F-11 (review F-R1, HIGH) The planned Cloud Run API was public.** See section 11.
+- **F-12 (review F-R2, MEDIUM) Tab characters inside `.\tasks.ps1`.** Origin: the executor's edit scripts went through
+  a Bash heredoc that collapsed `\\` to one backslash, so Python read `\t` as a TAB. The executor had seen the symptom
+  twice (F-09, "unexpected EOF" and an assertion showing a tab) but did not check what had already been written. See section 11.
 - **F-03 Logistics content in `core/`** beyond the brief's list (scoring `WRITE_TOOLS`, refusal text, doc tool description,
   system prompt). Handled in Phase 3a.
 
@@ -306,7 +310,7 @@ Other spend: $0 (no cloud resources created).
 ## 9. NEEDS HUMAN
 
 1. **Finish the real eval of demo-logistics** (quota). Why: the account allows 50 chat requests per day and the 9 remaining
-   cases need roughly 25-30. Commands (PowerShell, repo root, mock ERP running in another window via `.	asks.ps1 erp`):
+   cases need roughly 25-30. Commands (PowerShell, repo root, mock ERP running in another window via `.\tasks.ps1 erp`):
    ```powershell
    $env:FAKE_LLM = '0'
    uv run python -m core.ingest.run --docs-only
@@ -322,7 +326,7 @@ Other spend: $0 (no cloud resources created).
    shows old behaviour. It is your process, so I did not stop it.
    ```powershell
    Get-NetTCPConnection -LocalPort 8000 -State Listen | ForEach-Object { Get-Process -Id $_.OwningProcess } | Format-Table Id, ProcessName, StartTime
-   Stop-Process -Id 15616      # only if the line above shows that PID; then restart with .	asks.ps1 api
+   Stop-Process -Id 15616      # only if the line above shows that PID; then restart with .\tasks.ps1 api
    ```
    Expected: `/health` on port 8000 then shows `embeddings_match` (and, after Phase 2, `version`).
 
@@ -374,3 +378,79 @@ Other spend: $0 (no cloud resources created).
 - Engagement-owned Python (seed and fake scripts) runs inside the kit's process. Today it is our own code; with real
   customers it needs the same review as core code. Open question for the sponsor.
 - Missing Day 2 status and journal (noted in Orientation); not back-filled.
+
+## 11. Review findings (sprint 01b)
+
+Two findings from the sponsor's code review of Sprint 01, both fixed. Gate before the commit: tests and lint green (output
+in the commit section below); `terraform validate` clean; CI result at the end of this section.
+
+### F-R1 (HIGH): public approvals and chat on Cloud Run
+
+**Problem.** `deploy/terraform/gcp/main.tf` granted `allUsers` the `run.invoker` role on `fde-api`. Only `/ingest` and
+`/eval` needed a token. Once deployed, anyone could `POST /approvals/{thread}/approve` (the "by" field is self-declared)
+to run a paused write, or call `/chat` in a loop to spend the OpenAI quota. Blocked NEEDS HUMAN item 3.
+
+**Fix (DC-031, threat T-10, risk R-13).**
+
+1. Terraform: the `api_public` binding is gone. New variable `api_invokers` (IAM members); the deploy service account may
+   invoke (its smoke test now goes through `gcloud run services proxy`). The mock ERP stays invokable without IAM, with
+   the reason documented in `main.tf` and DC-031 (third-party role with its own random bearer token; IAM-private needs a
+   toolgen feature, backlog). Runbook section 4.2 steps 5-6: proxy access, expected 403 on the bare URL, how to read the tokens.
+2. App (generic, env-driven, `core/api/main.py`): `APPROVER_TOKEN` (`X-Approver-Token`) guards `GET /approvals`,
+   approve, reject and `GET /threads/*/audit`; `CHAT_TOKEN` (`X-Chat-Token`) guards `/chat` and `/ask`; `ADMIN_TOKEN` is
+   also accepted as `X-Admin-Token`. Own headers, because the IAM identity token occupies `Authorization` behind the proxy.
+   Unset = local behaviour unchanged, and `/health` shows `"approvals_auth": false, "chat_auth": false`. Every
+   `approval_decided` audit row records `token_verified`. Console: optional "Reviewer token" and "Chat token" fields,
+   kept in page memory only. Terraform generates both tokens into Secret Manager; Helm values and Compose pass them through.
+3. Tests (`tests/day05/test_review_fixes.py`): `test_without_the_reviewer_token_approval_routes_answer_401`,
+   `test_with_the_reviewer_token_the_approval_runs_and_is_audited_as_verified` (401 first, the write stays paused, then 200
+   with the token, audit `token_verified: true`), `test_local_mode_is_unchanged_and_audited_as_not_verified`,
+   `test_without_the_chat_token_chat_answers_401`, `test_health_shows_which_access_tokens_are_on`,
+   `test_admin_token_also_works_in_its_own_header`. All 171 earlier tests pass unchanged (local mode).
+4. Docs: T-10 and section 4b in `docs/10-security-and-compliance.md`, R-13 in the risk register, DC-031, note 13
+   practicum 7 (real output below), note 20 teach-back 3-4, closure report section 6.
+
+**Evidence: live run** (API with `APPROVER_TOKEN=dev-reviewer-token`, port 8001):
+
+```text
+GET /health -> ... "approvals_auth":true,"chat_auth":false ...
+no token -> 401  {"detail": "Missing or invalid reviewer token (X-Approver-Token)"}
+with token -> done
+approved by        token_verified
+   False team-lead           True
+```
+
+```text
+> terraform -chdir=deploy/terraform/gcp fmt -check -recursive   -> exit 0
+> terraform -chdir=deploy/terraform/gcp validate                 -> Success! The configuration is valid.
+> helm lint deploy/helm/fde-kit                                  -> 1 chart(s) linted, 0 chart(s) failed
+> grep allUsers deploy/terraform/gcp/*.tf                        -> only the documented mock ERP binding (main.tf)
+```
+
+Residual risk: a token proves "holder of the reviewer token", not which person; per-person identity and role routing stay
+deferred idea A.
+
+### F-R2 (MEDIUM): `.\tasks.ps1` corrupted to ".TAB asks.ps1"
+
+**Problem.** `tasks.ps1` lines 107 and 121 and this report (lines 309 and 325) contained a TAB character where `\t` was meant.
+
+**Root cause.** The executor sent Python edit scripts through Bash heredocs. In this environment the heredoc text reached
+Python with `\\` already collapsed to one backslash, so `".\\tasks.ps1"` in a Python string became `".\tasks.ps1"`, and
+Python turned `\t` into a TAB. The same mechanism broke the first repair attempt (it replaced the TAB with a TAB), which
+the new test caught at once. A regex sent the same way failed with "unbalanced parenthesis" for the same reason.
+
+**Fix.** A script file that builds the backslash as `chr(92)`; 2 + 2 occurrences replaced, 0 tabs left in both files.
+**Scan.** Every tracked .md, .ps1, .yml, .yaml, .tf and .py file was scanned for control characters and for
+escape-like sequences (`\n`, `\t`, `\r`): 189 escape-like sequences found, all legitimate (Python string escapes,
+`.\\tasks.ps1` in Python docstrings, one Python one-liner in note 05); no other control characters.
+**Prevention.** `test_no_tab_where_a_backslash_t_was_meant` (TAB + "asks.ps1" in any tracked text file) and
+`test_no_control_characters_in_tracked_text_files` (any control character other than tab, newline, CR; any tab in .md
+or .ps1). Both failed on the corrupted files and pass after the fix. They run in CI with the rest of pytest. Working rule:
+multi-line edits are written as script files, never through heredocs.
+
+### Effect on the zero-diff proof
+
+The F-R1 fix changes `core/api/main.py` and `core/agent/service.py` after the `kit-generic` tag. These are generic
+security changes from the review, not changes needed by engagement #2, so the tag was not moved. The proof stays valid
+for the range that added engagement #2: `git diff --stat kit-generic..e69d0b6 -- core/` prints nothing. Output after the
+Sprint 01b commit is below.

@@ -17,6 +17,13 @@ Endpoints
 Every request gets an OpenTelemetry span, a Prometheus observation and one JSON log line (core/observability).
 The response header X-Trace-Id is the same id stored in agent.audit_log.trace_id.
 
+Access tokens (Sprint 01b, review finding F-R1). Each is OFF when its env var is empty (local development) and then
+/health says so. Tokens travel in their own headers, because on Cloud Run the Authorization header carries the IAM
+identity token (gcloud run services proxy), so the app's tokens must not compete for it:
+  APPROVER_TOKEN  X-Approver-Token   GET /approvals, POST /approvals/*/approve|reject, GET /threads/*/audit
+  CHAT_TOKEN      X-Chat-Token       POST /chat, POST /ask (cost: every call spends model quota)
+  ADMIN_TOKEN     X-Admin-Token or Authorization: Bearer   POST /ingest, POST /eval (always fail closed)
+
 Conversation state is checkpointed in Postgres (shared by every API process). If the database is
 unreachable at startup the API still starts, with in-memory checkpoints and no audit trail, and
 /health reports "degraded".
@@ -197,15 +204,43 @@ class EvalRequest(BaseModel):
     cases: list[str] = Field(default_factory=list, description="Case ids to run; empty = the whole golden set")
 
 
-def require_admin(authorization: str | None = Header(None)) -> None:
-    """Admin endpoints change data (/ingest) or burn CPU (/eval). Fail closed: no ADMIN_TOKEN set = disabled.
-    compare_digest takes the same time for every wrong token, so the token cannot be guessed byte by byte."""
-    token = os.environ.get("ADMIN_TOKEN", "")
+def _token_matches(env_name: str, *offered: str | None) -> bool | None:
+    """None = no token configured; True/False = one of the offered values equals it. compare_digest takes the same
+    time for every wrong token, so a token cannot be guessed byte by byte."""
+    token = os.environ.get(env_name, "")
     if not token:
+        return None
+    return any(o is not None and hmac.compare_digest(o.encode(), token.encode()) for o in offered)
+
+
+def _bearer(authorization: str | None) -> str | None:
+    return authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+
+
+def require_admin(authorization: str | None = Header(None), x_admin_token: str | None = Header(None)) -> None:
+    """Admin endpoints change data (/ingest) or burn CPU (/eval). Fail closed: no ADMIN_TOKEN set = disabled."""
+    ok = _token_matches("ADMIN_TOKEN", x_admin_token, _bearer(authorization))
+    if ok is None:
         raise HTTPException(status_code=503, detail="Admin endpoints are disabled: set ADMIN_TOKEN on the server.")
-    if not hmac.compare_digest(authorization or "", f"Bearer {token}"):
-        raise HTTPException(status_code=401, detail="Missing or invalid admin bearer token",
-                            headers={"WWW-Authenticate": "Bearer"})
+    if not ok:
+        raise HTTPException(status_code=401, detail="Missing or invalid admin token", headers={"WWW-Authenticate": "Bearer"})
+
+
+def approver_auth(x_approver_token: str | None = Header(None)) -> bool:
+    """Approvals decide whether a WRITE runs. With APPROVER_TOKEN set, a decision needs the token (401 otherwise) and
+    the audit row records token_verified = true. Without it (local dev) decisions stay open and /health shows
+    approvals_auth: false. The "by" field is still a self-declared name: the token proves "a holder of the reviewer
+    token", not which person (per-person identity = SSO, deferred idea A)."""
+    ok = _token_matches("APPROVER_TOKEN", x_approver_token)
+    if ok is False:
+        raise HTTPException(status_code=401, detail="Missing or invalid reviewer token (X-Approver-Token)")
+    return bool(ok)
+
+
+def chat_auth(x_chat_token: str | None = Header(None)) -> None:
+    """Every chat turn spends model quota and money. With CHAT_TOKEN set, /chat and /ask need it (T-10)."""
+    if _token_matches("CHAT_TOKEN", x_chat_token) is False:
+        raise HTTPException(status_code=401, detail="Missing or invalid chat token (X-Chat-Token)")
 
 
 # ----------------------------------------------------------------------------- endpoints
@@ -229,6 +264,8 @@ def health() -> dict[str, Any]:
     return {"status": "ok" if ok else "degraded", "engagement": cfg.engagement.name,
             "llm_provider": cfg.llm.provider, "database": db_ok, "checkpointer": state["checkpointer"],
             "embeddings_match": vectors_ok,
+            # Which access tokens are switched on (never their values). false = open to anyone who can reach the API.
+            "approvals_auth": bool(os.environ.get("APPROVER_TOKEN")), "chat_auth": bool(os.environ.get("CHAT_TOKEN")),
             # Which code is this server running? BUILD_SHA is baked into the image at build time (Sprint 01, Day 4);
             # "dev" = started from a source checkout. Closes the Day 3 "stale server" gap.
             "version": {"app": app.version, "build_sha": os.environ.get("BUILD_SHA", "dev")}}
@@ -241,7 +278,7 @@ def engagement() -> dict[str, Any]:
     return {"name": info.name, "customer": info.customer, "description": info.description, "examples": info.examples}
 
 
-@app.post("/chat", response_model=TurnResponse)
+@app.post("/chat", response_model=TurnResponse, dependencies=[Depends(chat_auth)])
 def chat(req: ChatRequest) -> dict[str, Any]:
     try:
         return _service().chat(req.thread_id, req.message, user=req.user).to_dict()
@@ -249,33 +286,35 @@ def chat(req: ChatRequest) -> dict[str, Any]:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@app.get("/approvals")
+@app.get("/approvals", dependencies=[Depends(approver_auth)])
 def approvals() -> list[dict[str, Any]]:
     return _service().pending()
 
 
 @app.post("/approvals/{thread_id}/approve", response_model=TurnResponse)
-def approve(thread_id: str, body: Decision) -> dict[str, Any]:
+def approve(thread_id: str, body: Decision, verified: bool = Depends(approver_auth)) -> dict[str, Any]:
     try:
-        return _service().decide(thread_id, approved=True, by=body.by, reason=body.reason).to_dict()
+        return _service().decide(thread_id, approved=True, by=body.by, reason=body.reason,
+                                 token_verified=verified).to_dict()
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/approvals/{thread_id}/reject", response_model=TurnResponse)
-def reject(thread_id: str, body: RejectDecision) -> dict[str, Any]:
+def reject(thread_id: str, body: RejectDecision, verified: bool = Depends(approver_auth)) -> dict[str, Any]:
     try:
-        return _service().decide(thread_id, approved=False, by=body.by, reason=body.reason).to_dict()
+        return _service().decide(thread_id, approved=False, by=body.by, reason=body.reason,
+                                 token_verified=verified).to_dict()
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@app.get("/threads/{thread_id}/audit")
+@app.get("/threads/{thread_id}/audit", dependencies=[Depends(approver_auth)])
 def audit(thread_id: str) -> list[dict[str, Any]]:
     return _service().audit(thread_id)
 
 
-@app.post("/ask", response_model=AskResponse)
+@app.post("/ask", response_model=AskResponse, dependencies=[Depends(chat_auth)])
 def ask_documents(req: ChatRequest) -> dict[str, Any]:
     """Day 1 behaviour, kept: answer from the documents only, with citations. No tools, no state."""
     from core.rag.answer import answer_question

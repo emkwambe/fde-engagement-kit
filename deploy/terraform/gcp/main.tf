@@ -96,6 +96,16 @@ resource "random_password" "admin_token" {
   special = false
 }
 
+resource "random_password" "approver_token" { # reviewer token for /approvals (DC-031)
+  length  = 40
+  special = false
+}
+
+resource "random_password" "chat_token" { # /chat and /ask spend model quota (DC-031)
+  length  = 40
+  special = false
+}
+
 locals {
   generated_secrets = {
     "database-url"          = "postgresql://fde:${random_password.db.result}@/fde?host=${local.sql_socket}"
@@ -103,6 +113,8 @@ locals {
     "agent-ro-database-url" = "postgresql://agent_ro:${random_password.agent_ro.result}@/fde?host=${local.sql_socket}"
     "erp-api-token"         = random_password.erp_token.result
     "admin-token"           = random_password.admin_token.result
+    "approver-token"        = random_password.approver_token.result
+    "chat-token"            = random_password.chat_token.result
   }
 }
 
@@ -262,6 +274,8 @@ locals {
     AGENT_RO_DATABASE_URL = google_secret_manager_secret.generated["agent-ro-database-url"].secret_id
     ERP_API_TOKEN         = google_secret_manager_secret.generated["erp-api-token"].secret_id
     ADMIN_TOKEN           = google_secret_manager_secret.generated["admin-token"].secret_id
+    APPROVER_TOKEN        = google_secret_manager_secret.generated["approver-token"].secret_id
+    CHAT_TOKEN            = google_secret_manager_secret.generated["chat-token"].secret_id
     OPENAI_API_KEY        = google_secret_manager_secret.openai.secret_id
   }
 }
@@ -385,16 +399,31 @@ resource "google_cloud_run_v2_job" "ingest" {
   depends_on = [google_project_iam_member.runtime_sql, google_secret_manager_secret_iam_member.runtime_generated]
 }
 
-# Public demo endpoints (unauthenticated invoke). The API's admin routes still need ADMIN_TOKEN, and the ERP checks its
-# own bearer token. An organisation policy (domain-restricted sharing) may forbid allUsers: then drop these two and use
-# `gcloud run services proxy` for the demo.
-resource "google_cloud_run_v2_service_iam_member" "api_public" {
+# Who may call the API (Sprint 01b, review finding F-R1, DC-031). NOT allUsers: a public API would let anyone approve
+# writes (the "by" field is self-declared) and spend OpenAI quota through /chat. Callers need roles/run.invoker; people
+# reach it with `gcloud run services proxy fde-api` (IAM-authenticated), and the app checks its own tokens on top
+# (APPROVER_TOKEN for approvals, CHAT_TOKEN for chat, ADMIN_TOKEN for /ingest and /eval).
+resource "google_cloud_run_v2_service_iam_member" "api_invokers" {
+  for_each = toset(var.api_invokers)
   name     = google_cloud_run_v2_service.api.name
   location = var.region
   role     = "roles/run.invoker"
-  member   = "allUsers"
+  member   = each.value
 }
 
+resource "google_cloud_run_v2_service_iam_member" "deploy_smoke_test" { # deploy.yml smoke-tests /health via the proxy
+  name     = google_cloud_run_v2_service.api.name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+# The mock ERP stays invokable without IAM ON PURPOSE (documented reason, DC-031): it plays a third-party system that
+# authenticates callers itself, with a 40-character random bearer token from Secret Manager (401 without it), and the
+# generated tools send that token in the Authorization header, which Cloud Run IAM would also need. Making it IAM-private
+# means the tool generator must send a Google ID token in X-Serverless-Authorization: a generic toolgen feature, backlog.
+# Its data is synthetic; its only write (createTicket) is validated (credit <= 35%) and reached by the agent only after
+# a token-checked approval.
 resource "google_cloud_run_v2_service_iam_member" "erp_public" {
   name     = google_cloud_run_v2_service.erp.name
   location = var.region

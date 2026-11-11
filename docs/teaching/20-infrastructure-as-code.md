@@ -94,11 +94,16 @@ Everything Terraform sets ends up in its state file. Generated values (database 
 The services have lifecycle ignore_changes on the container image. Terraform owns the infrastructure (scaling, secrets, service account, Cloud SQL connection); the pipeline owns which image runs. Without that, every terraform apply would roll back to the image tag in its variables.
 </details>
 
-<details><summary>3. Why is the mock ERP public, and what still protects it?</summary>
+<details><summary>3. Why is the API NOT public, but the mock ERP is? (Sprint 01b, review finding F-R1)</summary>
 
-Cloud Run's private mode needs a Google ID token in the Authorization header, but our generated tools send the ERP's own bearer token there. So the ERP is invokable by anyone, and the application checks its own token (401 without it). In a real engagement the customer's API has its own auth; the API service could also move behind an internal ingress.
+The first version gave `allUsers` invoke rights on the API. A reviewer pointed out what that means: anyone on the internet could approve a paused write (the "by" name is typed in) or loop /chat to burn the OpenAI quota. Now the API has no public binding: only members of `api_invokers` (and the deploy account, for its smoke test) can call it, people use `gcloud run services proxy fde-api`, and the app adds reviewer and chat tokens on top (DC-031). The mock ERP stays invokable without IAM, with a documented reason: it plays a third-party system that checks its own 40-character token, and our generated tools send that token in the Authorization header that Cloud Run IAM would also need. Making it IAM-private means sending a Google ID token in X-Serverless-Authorization, a toolgen feature in the backlog.
+</details>
+
+<details><summary>4. After `terraform apply`, opening the api_url in a browser gives 403. Is the deploy broken?</summary>
+
+No, that is the point. Cloud Run refuses callers without run.invoker. Run `gcloud run services proxy fde-api --region us-east1 --port 8080` and use http://localhost:8080: the proxy adds your Google identity. Add a colleague to `api_invokers` and apply again to let them in.
 </details>
 
 ## Interview line
 
-"The GCP deployment is Terraform: Cloud SQL Postgres 16 with pgvector, Secret Manager, least-privilege service accounts, scale-to-zero Cloud Run and keyless GitHub deploys through Workload Identity Federation; it passes fmt and validate, costs about four cents an hour while it exists, and `destroy` is part of the runbook."
+"The GCP deployment is Terraform: Cloud SQL Postgres 16 with pgvector, Secret Manager, least-privilege service accounts, a scale-to-zero Cloud Run API that is reachable only through IAM, and keyless GitHub deploys through Workload Identity Federation; it passes fmt and validate, costs about four cents an hour while it exists, and `destroy` is part of the runbook."
