@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FDE Agent Console</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --muted:#667085; --line:#e4e7ec;
+          --accent:#3b5bdb; --ok:#2b8a3e; --no:#c92a2a; --warn:#f59f00; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:14px 20px; background:var(--card); border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; }
+  header .meta { color:var(--muted); font-size:13px; }
+  main { max-width:860px; margin:0 auto; padding:16px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input, textarea { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  textarea { width:100%; resize:vertical; min-height:56px; }
+  button { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
+  button.ghost { background:#fff; color:var(--accent); }
+  button.ok { background:var(--ok); border-color:var(--ok); }
+  button.no { background:var(--no); border-color:var(--no); }
+  button:disabled { opacity:.5; cursor:default; }
+  #log { display:flex; flex-direction:column; gap:10px; margin:16px 0; }
+  .msg { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; }
+  .msg.user { border-left:4px solid var(--accent); }
+  .msg.agent { border-left:4px solid var(--ok); }
+  .msg.pause { border-left:4px solid var(--warn); }
+  .msg.error { border-left:4px solid var(--no); }
+  .who { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  details { margin-top:6px; font-size:13px; color:var(--muted); }
+  pre { white-space:pre-wrap; word-break:break-word; background:#f2f4f7; padding:8px; border-radius:6px; font-size:12.5px; margin:6px 0; }
+  .examples button { font-size:13px; padding:4px 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FDE Agent Console</h1>
+  <span class="meta" id="health">checking...</span>
+</header>
+<main>
+  <div class="row">
+    <label>Thread <input id="thread" size="22"></label>
+    <button class="ghost" id="newThread" type="button">New thread</button>
+    <label>Your name <input id="user" size="14" value="reviewer"></label>
+  </div>
+  <div class="row examples" style="margin-top:10px">
+    <span class="meta">Try:</span>
+    <button class="ghost" type="button">Where is shipment SHP-2207?</button>
+    <button class="ghost" type="button">What SLA credit does a Gold customer get for 3 days late?</button>
+    <button class="ghost" type="button">Open a credit ticket for ORD-1043 for the amount the policy allows.</button>
+  </div>
+  <div id="log"></div>
+  <form id="form">
+    <textarea id="message" placeholder="Ask about orders, shipments or policy..." required></textarea>
+    <div class="row" style="margin-top:8px"><button id="send" type="submit">Send</button></div>
+  </form>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const log = $("log");
+const newId = () => "web-" + Math.random().toString(36).slice(2, 10);
+$("thread").value = newId();
+
+function add(kind, who, html) {
+  const div = document.createElement("div");
+  div.className = "msg " + kind;
+  div.innerHTML = `<div class="who">${who}</div>${html}`;
+  log.appendChild(div);
+  div.scrollIntoView({ behavior: "smooth", block: "end" });
+  return div;
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function stepsHtml(steps) {
+  if (!steps.length) return "";
+  const lines = steps.map((s) => s.call ? `-> ${s.call} ${JSON.stringify(s.args)}` : `<- ${s.result}: ${s.content.slice(0, 300)}`);
+  return `<details><summary>Tool activity (${steps.length})</summary><pre>${esc(lines.join("\n"))}</pre></details>`;
+}
+
+async function call(path, body) {
+  const res = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  const data = await res.json();
+  if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+  return data;
+}
+
+function show(turn) {
+  if (turn.status === "done") {
+    add("agent", "Agent", `<div>${esc(turn.answer)}</div>${stepsHtml(turn.steps)}`);
+    return;
+  }
+  const p = turn.pending[0];
+  const card = add("pause", "Waiting for your approval",
+    `<div><b>${esc(p.name)}</b> wants to run with:</div><pre>${esc(JSON.stringify(p.args, null, 2))}</pre>` +
+    `<div class="row"><input class="reason" placeholder="Reason (required to reject)" size="36">` +
+    `<button class="ok" type="button">Approve</button><button class="no" type="button">Reject</button></div>` +
+    stepsHtml(turn.steps));
+  const [okBtn, noBtn] = card.querySelectorAll("button.ok, button.no");
+  const reason = card.querySelector(".reason");
+  const decide = async (approved) => {
+    if (!approved && reason.value.trim().length < 3) { reason.focus(); reason.placeholder = "Please give a reason (3+ characters)"; return; }
+    okBtn.disabled = noBtn.disabled = true;
+    try {
+      const body = { by: $("user").value || "reviewer", reason: reason.value.trim() };
+      show(await call(`/approvals/${encodeURIComponent(turn.thread_id)}/${approved ? "approve" : "reject"}`, body));
+    } catch (e) { add("error", "Error", esc(e.message)); }
+  };
+  okBtn.onclick = () => decide(true);
+  noBtn.onclick = () => decide(false);
+}
+
+$("form").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const message = $("message").value.trim();
+  if (!message) return;
+  add("user", $("user").value || "you", esc(message));
+  $("message").value = "";
+  $("send").disabled = true;
+  try { show(await call("/chat", { thread_id: $("thread").value, message, user: $("user").value })); }
+  catch (e) { add("error", "Error", esc(e.message)); }
+  finally { $("send").disabled = false; }
+};
+$("newThread").onclick = () => { $("thread").value = newId(); log.innerHTML = ""; };
+document.querySelectorAll(".examples button").forEach((b) => b.onclick = () => { $("message").value = b.textContent; });
+
+call("/health").then((h) => {
+  $("health").textContent = `${h.engagement} - model: ${h.llm_provider} - checkpoints: ${h.checkpointer} - ${h.status}`;
+}).catch(() => { $("health").textContent = "API not reachable"; });
+</script>
+</body>
+</html>

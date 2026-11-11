@@ -65,7 +65,8 @@ Colors show on GitHub. In VS Code's Markdown preview (Ctrl+Shift+V) the boxes st
 | 10 | [The legacy system](10-mock-erp.md) | Mock ERP: REST API, OpenAPI contract, bearer auth, drift test | 2 |
 | 11 | [Tools from a spec](11-tools-from-a-spec.md) | Tool generator, read-only SQL tool, approval flags | 2 |
 | 12 | [The agent graph](12-agent-graph.md) | LangGraph: agent loop, routing, approval interrupt, Postgres checkpoints | 2 |
-| 13 | Asking permission | Approval API, audit trail, `/chat` upgrade | 2 (next) |
+| 13 | [Asking permission](13-asking-permission.md) | Approval API, atomic decisions, audit trail, agent console | 2 |
+| 14 | Measuring quality | Golden-set evals, guardrails, prompt-injection defence | 3 (next) |
 
 ## How to use these notes
 

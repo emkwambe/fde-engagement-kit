@@ -16,7 +16,7 @@ param(
   [Parameter(Position = 0)]
   [ValidateSet('help', 'setup', 'up', 'down', 'migrate', 'seed', 'ingest', 'eval', 'demo',
                'test', 'lint', 'kind-up', 'kind-down', 'ingest-remote', 'check-tools',
-               'erp', 'erp-spec')]
+               'erp', 'erp-spec', 'api')]
   [string]$Task = 'help',
 
   [string]$Engagement = 'demo-logistics'
@@ -64,6 +64,7 @@ switch ($Task) {
       '  demo           up + migrate + seed + ingest + start API at http://localhost:8000/docs',
       '  test / lint    pytest / ruff + mypy',
       '  erp            Run the mock ERP (legacy system) at http://localhost:8100 (Day 2)',
+      '  api            Run the API + agent console at http://localhost:8000        (Day 2)',
       '  erp-spec       Export the mock ERP''s OpenAPI contract to services/mock-erp/openapi.yaml',
       '  kind-up/-down  Create / delete the local Kubernetes cluster            (Day 4)',
       '  ingest-remote  Run ingestion as a Cloud Run job                       (Day 4)'
@@ -92,8 +93,11 @@ switch ($Task) {
     & $PSCommandPath migrate
     & $PSCommandPath seed   -Engagement $Engagement
     & $PSCommandPath ingest -Engagement $Engagement
-    Write-Host 'API docs: http://localhost:8000/docs  (Ctrl+C to stop; chat UI arrives Day 3)' -ForegroundColor Green
-    Start-Process 'http://localhost:8000/docs'
+    & $PSCommandPath api -Engagement $Engagement
+  }
+  'api' {
+    Write-Host 'Agent console: http://localhost:8000   API docs: http://localhost:8000/docs  (Ctrl+C to stop)' -ForegroundColor Green
+    Start-Process 'http://localhost:8000'
     uv run uvicorn core.api.main:app --port 8000
   }
   'test' { Invoke-Step 'Run tests' { $env:FAKE_LLM = '1'; uv run pytest -q } }

@@ -1,5 +1,6 @@
 """Talk to the agent from PowerShell. Conversations are saved in Postgres, so a paused thread
-can be approved or rejected later, from a new window, even after a restart.
+can be approved or rejected later, from a new window, even after a restart. Every turn is recorded
+in agent.audit_log and every pause in agent.approvals (same AgentService as the API).
 
 Usage:
   uv run python scripts/ask_agent.py "Where is shipment SHP-2207?"
@@ -20,8 +21,10 @@ import uuid
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.agent.checkpoint import postgres_checkpointer  # noqa: E402
-from core.agent.graph import AgentTurn, agent_model, agent_tools, ask, build_agent, decide, run_config  # noqa: E402
+from core.agent.graph import AgentTurn, agent_model, agent_tools, build_agent, run_config  # noqa: E402
+from core.agent.service import AgentService  # noqa: E402
 from core.config import load_engagement  # noqa: E402
+from core.db.connection import connect  # noqa: E402
 from core.llm.factory import get_embeddings  # noqa: E402
 
 
@@ -62,6 +65,8 @@ def main() -> None:
     tools = agent_tools(cfg, get_embeddings(cfg.embeddings))
     with postgres_checkpointer() as saver:
         agent = build_agent(cfg, tools, agent_model(cfg), checkpointer=saver)
+        service = AgentService(cfg, agent, db=lambda: connect(vector=False))
+        user = os.environ.get("USERNAME") or os.environ.get("USER") or "cli"
         if args.history:
             for m in agent.get_state(run_config(cfg, thread)).values.get("messages", []):
                 calls = getattr(m, "tool_calls", None)
@@ -69,10 +74,9 @@ def main() -> None:
             return
         try:
             if args.approve or args.reject is not None:
-                turn = decide(agent, cfg, thread, approved=args.approve, by=os.environ.get("USERNAME", "cli"),
-                              reason=args.reject or "")
+                turn = service.decide(thread, approved=args.approve, by=user, reason=args.reject or "")
             elif args.message:
-                turn = ask(agent, cfg, thread, args.message)
+                turn = service.chat(thread, args.message, user=user)
             else:
                 parser.print_help()
                 return
