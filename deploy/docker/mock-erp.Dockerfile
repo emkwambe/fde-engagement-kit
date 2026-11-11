@@ -30,6 +30,9 @@ ARG BUILD_SHA=dev
 LABEL org.opencontainers.image.title="fde-mock-erp" org.opencontainers.image.revision="${BUILD_SHA}"
 ENV PATH=/venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 BUILD_SHA=${BUILD_SHA} HOME=/tmp \
     ERP_SHIPMENTS_CSV=/data/tables/shipments.csv ERP_TICKETS_FILE=/tmp/erp/tickets.json
+# Security updates for the OS packages of the base image. Found by trivy in CI (Sprint 01): the pinned base had
+# 7 CRITICAL CVEs with fixes already published (libssl3, gnutls, perl). Pinning by digest freezes these too, so we upgrade.
+RUN apt-get update && apt-get -y upgrade --no-install-recommends && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 COPY --from=build /venv /venv
 COPY --from=data /src/engagements/demo-logistics/data/tables/shipments.csv /data/tables/shipments.csv

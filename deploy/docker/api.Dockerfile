@@ -34,6 +34,9 @@ ENV PATH=/app/.venv/bin:$PATH \
     HOME=/tmp \
     FAKE_LLM=1 \
     OTEL_TRACES_EXPORTER=console
+# Security updates for the OS packages of the base image. Found by trivy in CI (Sprint 01): the pinned base had
+# 7 CRITICAL CVEs with fixes already published (libssl3, gnutls, perl). Pinning by digest freezes these too, so we upgrade.
+RUN apt-get update && apt-get -y upgrade --no-install-recommends && rm -rf /var/lib/apt/lists/*
 # A fixed, non-root user (uid 10001). Kubernetes can then enforce runAsNonRoot without guessing the uid.
 RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 WORKDIR /app
