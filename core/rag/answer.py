@@ -13,7 +13,7 @@ Flow:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import psycopg
 from langchain_core.embeddings import Embeddings
@@ -21,6 +21,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from core.config.schema import EngagementConfig
+from core.guardrails.tools import clean_text
 from core.ingest.chunking import slugify
 from core.retrieval.search import SearchResult, search
 
@@ -129,6 +130,8 @@ def answer_question(
     if not results or best_similarity < cfg.retrieval.min_score:
         return Answer(answer=NO_ANSWER, citations=[], confidence=best_similarity)
 
+    # Day 3 guardrails: injection lines and PII are removed from the chunks before the model sees them.
+    results = [replace(r, text=clean_text(r.text, cfg.guardrails)) for r in results]
     messages = build_messages(question, results, cfg.engagement.customer)
     reply = chat.invoke(messages)
     text = reply.content if isinstance(reply.content, str) else str(reply.content)

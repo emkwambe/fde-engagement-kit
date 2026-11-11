@@ -29,6 +29,8 @@ from langgraph.graph.state import CompiledStateGraph
 
 from core.agent.graph import AgentTurn, ask, decide
 from core.config.schema import EngagementConfig
+from core.guardrails import BLOCKED_ANSWER, check_input
+from core.guardrails.pii import redact
 
 DbFactory = Callable[[], AbstractContextManager[psycopg.Connection]]
 MAX_DETAIL = 2000  # characters of a tool result kept in the audit log
@@ -41,6 +43,12 @@ class AgentService:
     # ------------------------------------------------------------------ public API
     def chat(self, thread_id: str, message: str, user: str = "anonymous") -> AgentTurn:
         trace = uuid.uuid4().hex
+        blocked = check_input(message, self.cfg.guardrails)
+        if blocked:  # direct prompt injection: refuse without calling the model or any tool (T-02)
+            turn = AgentTurn(thread_id, "done", answer=BLOCKED_ANSWER)
+            first = {"event": "guardrail_blocked", "detail": {"user": user, "matched": blocked, **self._text(message)}}
+            self._record(turn, trace, first=first)
+            return turn
         turn = ask(self.agent, self.cfg, thread_id, message)
         self._record(turn, trace, first={"event": "user_message", "detail": {"user": user, **self._text(message)}})
         return turn
@@ -79,7 +87,7 @@ class AgentService:
     # ------------------------------------------------------------------ recording
     def _text(self, text: str) -> dict[str, Any]:
         if self.cfg.guardrails.log_prompts:
-            return {"text": text}
+            return {"text": redact(text, self.cfg.guardrails.pii_redaction)[0]}  # even full logs never keep PII
         return {"chars": len(text), "sha256": hashlib.sha256(text.encode()).hexdigest()[:16]}
 
     def _record(self, turn: AgentTurn, trace: str, first: dict[str, Any]) -> None:

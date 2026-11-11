@@ -40,6 +40,7 @@ from langgraph.types import Command, interrupt
 from core.agent.doc_tool import search_documents_tool
 from core.agent.fake import ScriptedAgentChat
 from core.config.schema import EngagementConfig
+from core.guardrails.tools import guard_tools
 from core.llm.factory import get_chat_model
 from core.toolgen.registry import build_tools, requires_approval
 
@@ -65,12 +66,13 @@ Answer concisely: the direct answer first, then the supporting numbers and citat
 
 # ----------------------------------------------------------------------------- building blocks
 def agent_tools(cfg: EngagementConfig, embeddings: Embeddings, **build_kwargs: Any) -> list[BaseTool]:
-    """search_documents + every tool generated from engagement.yaml (SQL + OpenAPI)."""
+    """search_documents + every tool generated from engagement.yaml (SQL + OpenAPI), each wrapped by the
+    guardrails so injection lines and PII are removed from results before the model sees them (Day 3)."""
     tools: list[BaseTool] = [search_documents_tool(cfg, embeddings), *build_tools(cfg, **build_kwargs)]
     names = [t.name for t in tools]
     if len(names) != len(set(names)):
         raise ValueError(f"Duplicate tool names: {names}")
-    return tools
+    return guard_tools(tools, cfg.guardrails)
 
 
 def agent_model(cfg: EngagementConfig) -> BaseChatModel:
