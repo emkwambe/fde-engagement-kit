@@ -54,7 +54,7 @@ jobs:
           gcloud run deploy fde-mock-erp --image "$REG/fde-mock-erp:$TAG" --region "$REGION" --quiet
           gcloud run jobs update fde-ingest --image "$REG/fde-api:$TAG" --region "$REGION" --quiet
           gcloud run deploy fde-api --image "$REG/fde-api:$TAG" --region "$REGION" --quiet
-      - name: Smoke test (through the IAM-authenticated proxy: the API is not public, DC-031)
+      - name: "Smoke test (through the IAM-authenticated proxy: the API is not public, DC-031)"
         run: |
           gcloud run services proxy fde-api --region "$REGION" --port 8080 --quiet > proxy.log 2>&1 &
           for i in $(seq 1 30); do curl -sf localhost:8080/health > /dev/null && break; sleep 2; done

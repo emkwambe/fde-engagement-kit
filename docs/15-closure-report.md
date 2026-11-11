@@ -114,6 +114,7 @@ applying it is the sponsor's step).
 | Sponsor review F-R2 (MEDIUM): `.\tasks.ps1` shown as ".TAB asks.ps1" in tasks.ps1 and the report | Edit scripts passed through a heredoc that collapsed `\\` before Python read `\t` as TAB | Fixed; repo scanned; test fails on TAB+"asks.ps1" or control characters (DC-032) |
 | Sponsor review F-R3 (LOW): two API tests failed instead of skipping with Postgres down | They opened the database through `/eval` without asking for the database fixture | Both depend on `migrated_db` now (DC-034) |
 | Commit 4a7c808 titled "Real eval complete" for an INCOMPLETE report (F-R4) | A commit step meant only for exit code 0 was run anyway | Not rewritten (rule 7); corrected in DC-033; the commit step is now conditional on exit code 0 |
+| Deploy workflow file invalid since Sprint 01b (F-R5); every push listed a failed 0-second run | An unquoted step name containing ": "; CI never parsed workflows it does not run | Name quoted; a test parses every workflow (DC-035) |
 | Logistics content inside `core/` | Built for one customer first | Eleven gaps moved to config (DC-019..DC-029) |
 
 | What went well | What didn't | What I'd do differently next engagement |

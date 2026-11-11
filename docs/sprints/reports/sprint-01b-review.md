@@ -7,7 +7,8 @@ The executor's own report is [sprint-01-report.md](sprint-01-report.md), section
 ## 1. Verdict
 
 **Accepted.** Both review findings are fixed and covered by tests. The kit's promise still holds. One small new test
-issue (F-R3) and one commit-message mistake (F-R4) were found; both are recorded below. The real eval is still
+issue (F-R3), one commit-message mistake (F-R4) and a broken deploy workflow file (F-R5) were found; all are
+recorded below, and F-R3 and F-R5 are fixed. The real eval is still
 INCOMPLETE because of the provider quota: 20 of 27 cases have run and all 20 pass.
 
 ## 2. What was checked, and how
@@ -20,7 +21,7 @@ Every check ran on commit `e1e0a78` (Sprint 01b) in a separate clone, not on the
 | F-R1: approvals and chat need tokens | Read `core/api/main.py`; ran `tests/day05/test_review_fixes.py` | `APPROVER_TOKEN` (`X-Approver-Token`) and `CHAT_TOKEN` (`X-Chat-Token`); `/health` shows `approvals_auth` and `chat_auth`; 401 without the token |
 | F-R2: no corrupted `.\tasks.ps1` | Searched every `.md` and `.ps1` for a TAB followed by `asks.ps1` | 0 found |
 | Kit promise (NFR-02) | `git diff kit-generic..e69d0b6 -- core/` | 0 lines. After e69d0b6 only `core/agent/service.py` and `core/api/main.py` changed (60 lines added, 17 removed), both for the generic F-R1 fix |
-| Every commit green | `uv run pytest -q`, `ruff check .`, `mypy core` | **179 passed** with Postgres running (matches the report); ruff and mypy clean (47 files) |
+| Every commit green | `uv run pytest -q`, `ruff check .`, `mypy core` | **179 passed** with Postgres running (matches the report); ruff and mypy clean (47 files). The `ci` run is green, but the deploy workflow file was invalid (F-R5) |
 | It runs on the author's laptop | `.\tasks.ps1 demo`, then `/health`, `/chat`, `/metrics`, `.\tasks.ps1 stack-down` | Passed. First container run on the laptop. `build_sha` = `e1e0a78`, `embeddings_match` = True, `/chat` answered the SHP-2207 status, metrics counted the requests |
 
 ## 3. Findings
@@ -29,6 +30,7 @@ Every check ran on commit `e1e0a78` (Sprint 01b) in a separate clone, not on the
 |---|---|---|---|---|
 | F-R3 | LOW | Two tests call `POST /eval`, which builds the agent service and so opens Postgres, but they did not ask for the database fixture. With Postgres stopped they **failed** (`psycopg.OperationalError`) instead of **skipping**. Found because the first review run had the database down: 2 failed, 135 passed, 42 skipped | Both tests now take the `migrated_db` fixture and carry `@pytest.mark.db` (DC-034). Checked both ways: database up 179 passed; database down 135 passed, 44 skipped, 0 failed | Fixed |
 | F-R4 | LOW | Commit `4a7c808` is titled "Real eval complete (gpt-6-luna)", but the report it adds (1047) is INCOMPLETE (20 of 27). The title came from a command block meant only for a complete run, and the block was run anyway | Not amended: the commit is pushed, and history rewrites are forbidden (CLAUDE.md rule 7). Recorded here and in DC-033. The next commit block for the eval now commits only when the exit code is 0 | Documented |
+| F-R5 | MEDIUM | `.github/workflows/deploy.yml` has not been valid YAML since 065ccf1: the renamed smoke-test step contains ": " without quotes. GitHub listed a failed 0-second `deploy.yml` run on every push since then (four runs, "workflow file issue"). Nothing was deployed (manual trigger only, `DEPLOY_ENABLED` unset), but the deploy could not have been started. Missed by the first review pass, which looked only at the `ci` run | Step name quoted. New `tests/day05/test_workflow_files.py` parses every workflow (name, triggers, jobs), so CI now fails on a broken workflow even if it never runs on push (DC-035). Checked with `gh run list --workflow deploy.yml` after the push | Fixed |
 
 ### Observations (no change needed now)
 
