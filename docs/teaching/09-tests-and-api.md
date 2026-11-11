@@ -2,6 +2,14 @@
 
 Component: `tests/` (pytest), fake models, `core/api/main.py` (FastAPI: `/health`, `/chat`, `/docs`)
 
+<!-- Color key: NOTE (blue) = INTENT/Why, IMPORTANT (purple) = CONTEXT/When-Where, TIP (green) = ACTION/How, WARNING (yellow) = RESULT/What, CAUTION (red) = RESULT of a break-it practicum -->
+
+## At a glance
+
+| What | When | How | Why |
+|---|---|---|---|
+| Automated tests, fake models and the FastAPI front door | Before every commit, and whenever another program needs the system | pytest with fakes and acceptance tests; /health, /chat and auto-generated /docs | Fast, free, repeatable proof that it works, and honest health reporting |
+
 ## ELI10
 
 Before a plane takes off, the pilot runs a **checklist**: flaps, fuel, lights. They don't trust their memory, they check every time. **Tests** are our checklist: small programs that use the real code and shout if something is wrong. We have 39 of them.
@@ -15,63 +23,80 @@ The **API** is the front door of the project. Other programs knock (`POST /chat`
 
 ## Practicums
 
-```text
-$ practicum start
+Color key: blue = **INTENT (Why?)**, purple = **CONTEXT (When / where?)**, green = **ACTION (How?)**, yellow = **RESULT (What?)**.
 
-[INTENT]  "Is everything working right now?"
-[CONTEXT] Database up, all Day 1 code in place.
-[ACTION]  uv run pytest -q
-[RESULT]  39 passed
-          Setup checks (18) + Day 1 acceptance tests (21). Run before every commit.
-```
+### Practicum 1
 
-```text
-$ practicum start   (break it on purpose)
+> [!NOTE]
+> **INTENT - Why?** "Is everything working right now?"
 
-[INTENT]  "What happens to the tests if the database is down?"
-[CONTEXT] Postgres stopped.
-[ACTION]  .\tasks.ps1 down; uv run pytest tests/test_etl_db.py -q -rs
-          .\tasks.ps1 up   (undo)
-[RESULT]  SKIPPED ... Postgres not reachable at postgresql://fde:fde@localhost:5432/fde
-          (OperationalError). Run: .\tasks.ps1 up
-          2 skipped
-          Database tests SKIP with instructions instead of failing with a scary stack trace.
-```
+> [!IMPORTANT]
+> **CONTEXT - When / where?** Database up, all Day 1 code in place.
 
-```text
-$ practicum start   (break it on purpose)
+> [!TIP]
+> **ACTION - How?**
+>
+> ```powershell
+> uv run pytest -q
+> ```
 
-[INTENT]  "What does the API say when the database is down?"
-[CONTEXT] API running, Postgres stopped.
-[ACTION]  .\tasks.ps1 down; Invoke-RestMethod http://localhost:8000/health
-          .\tasks.ps1 up   (undo)
-[RESULT]  status: degraded   database: False
-          The front door stays open and reports the problem honestly, which is exactly
-          what a load balancer or Cloud Run health check needs to see.
-```
+> [!WARNING]
+> **RESULT - What happened, and what does it mean?**
+>
+> ```text
+> 39 passed
+> Setup checks (18) + Day 1 acceptance tests (21). Run before every commit.
+> ```
 
-```text
-$ practicum start
+### Practicum 2
 
-[INTENT]  "I opened the API in my browser and got 404. Is it broken?"
-[CONTEXT] Browser at http://localhost:8000/
-[ACTION]  Look at the API window's log, then open http://localhost:8000/docs
-[RESULT]  "GET / HTTP/1.1" 404 Not Found
-          "GET /favicon.ico HTTP/1.1" 404 Not Found
-          Nothing lives at "/", so 404 is correct. /docs shows the interactive manual,
-          generated automatically from the code, where "Try it out" calls /chat.
-```
+> [!NOTE]
+> **INTENT - Why?** "I opened the API in my browser and got 404. Is it broken?"
 
-```text
-$ practicum start
+> [!IMPORTANT]
+> **CONTEXT - When / where?** Browser at http://localhost:8000/
 
-[INTENT]  "How much did today's testing cost?"
-[CONTEXT] FAKE_LLM=1 the whole day.
-[ACTION]  Invoke-RestMethod http://localhost:8000/health | Select-Object llm_provider
-[RESULT]  llm_provider: fake
-          $0 spent. Fakes make tests fast, free and repeatable. Real-model quality is
-          measured separately with evals (Day 3), on purpose and within budget.
-```
+> [!TIP]
+> **ACTION - How?**
+>
+> ```powershell
+> Start-Process http://localhost:8000/   # then look at the API window's log
+> Start-Process http://localhost:8000/docs
+> ```
+
+> [!WARNING]
+> **RESULT - What happened, and what does it mean?**
+>
+> ```text
+> "GET / HTTP/1.1" 404 Not Found
+> "GET /favicon.ico HTTP/1.1" 404 Not Found
+> Nothing lives at "/", so 404 is correct. /docs shows the interactive manual,
+> generated automatically from the code, where "Try it out" calls /chat.
+> ```
+
+### Practicum 3
+
+> [!NOTE]
+> **INTENT - Why?** "How much did today's testing cost?"
+
+> [!IMPORTANT]
+> **CONTEXT - When / where?** FAKE_LLM=1 the whole day.
+
+> [!TIP]
+> **ACTION - How?**
+>
+> ```powershell
+> Invoke-RestMethod http://localhost:8000/health | Select-Object llm_provider
+> ```
+
+> [!WARNING]
+> **RESULT - What happened, and what does it mean?**
+>
+> ```text
+> llm_provider: fake
+> $0 spent. Fakes make tests fast, free and repeatable. Real-model quality is
+> measured separately with evals (Day 3), on purpose and within budget.
+> ```
 
 ## Teach-back check
 
