@@ -1,0 +1,121 @@
+# Engagement #2 (D-18): Coastline Climate Services (fictional), HVAC field service.
+# Built from engagements/_template with ZERO changes in core/ (NFR-02): everything customer-specific is in this folder.
+
+engagement:
+  name: coastline-hvac
+  customer: Coastline Climate Services (fictional)
+  description: Dispatch copilot - service-plan SLAs and credits, live work orders in the CMMS, and approved dispatches.
+  examples:
+    - What response time does a Premium customer get for an emergency?
+    - Did work order WO-5017 miss its SLA, and what credit do we owe?
+    - Dispatch the on-call technician to WO-5040 with the right after-hours fee.
+
+llm:
+  provider: openai
+  model: ${LLM_MODEL}
+  max_steps: 8
+  system_prompt: engagements/coastline-hvac/prompts/agent-v1.txt
+  prompt_version: hvac-agent-v1
+  fake_script: engagements/coastline-hvac/extensions/fake_agent.py   # FAKE_LLM=1 only
+
+embeddings:
+  provider: openai
+  model: text-embedding-3-small
+  dimensions: 1536
+
+vector_store:
+  backend: pgvector
+  dsn: ${DATABASE_URL}
+
+retrieval:
+  top_k: 5
+  hybrid: true
+  chunk_size: 800
+  chunk_overlap: 100
+  min_score: 0.3
+  tool_description: "Search Coastline's policy binder (response-time SLA and credits, after-hours fees, emergency vs routine, warranty, dispatch rules, escalation, privacy). Returns passages with a 'ref' label; cite facts as [ref]."
+
+sources:
+  documents:
+    - type: local
+      path: engagements/coastline-hvac/data/docs
+      include: ["*.md"]
+  tables:
+    - type: csv
+      path: engagements/coastline-hvac/data/tables
+      target_schema: field
+      schema_sql: [engagements/coastline-hvac/sql/001_field_tables.sql]
+      seed_script: engagements/coastline-hvac/extensions/seed.py
+      tables:
+        - name: customers
+          file: customers.csv
+          key: customer_id
+          columns:
+            customer_id: {type: text}
+            name: {type: text}
+            plan: {type: enum, values: [Basic, Plus, Premium]}
+            city: {type: text}
+            email: {type: text}
+            phone: {type: text}
+            contract_start: {type: date, required: false}
+        - name: technicians
+          file: technicians.csv
+          key: tech_id
+          columns:
+            tech_id: {type: text}
+            name: {type: text}
+            skill: {type: enum, values: [residential, commercial, refrigeration]}
+            on_call: {type: bool}
+            epa_608: {type: bool}
+        - name: equipment
+          file: equipment.csv
+          key: equipment_id
+          references: {customer_id: customers}
+          columns:
+            equipment_id: {type: text}
+            customer_id: {type: text}
+            kind: {type: text}
+            installed_on: {type: date, required: false}
+        - name: work_orders
+          file: work_orders.csv
+          key: work_order_id
+          references: {customer_id: customers, equipment_id: equipment, tech_id: technicians}
+          columns:
+            work_order_id: {type: text}
+            customer_id: {type: text}
+            equipment_id: {type: text}
+            priority: {type: enum, values: [emergency, routine]}
+            opened_at: {type: timestamp}
+            responded_at: {type: timestamp, required: false}
+            status: {type: text, lower: true, default: open}
+            tech_id: {type: text}
+            after_hours: {type: bool}
+            summary: {type: text}
+
+tools:
+  sql:
+    enabled: true
+    dsn: ${AGENT_RO_DATABASE_URL}
+    schema: field
+    tables: [customers, technicians, equipment, work_orders, sla_misses]
+    row_limit: 200
+  openapi:
+    - spec: services/mock-cmms/openapi.yaml
+      base_url: ${CMMS_API_URL:-http://localhost:8200}
+      auth: { type: bearer, token: "${CMMS_API_TOKEN:-dev-token}" }
+      include_operations: [getWorkOrder, listWorkOrders, createDispatch]
+      require_approval: [POST, PUT, PATCH, DELETE]
+
+guardrails:
+  pii_redaction: [email, phone]
+  injection_filter: true
+  log_prompts: false
+  blocked_answer: "I can't follow instructions that try to change my rules. I can help with service plans, work orders, SLA credits and dispatches within my normal permissions."
+
+evals:
+  golden_set: engagements/coastline-hvac/evals/golden.jsonl
+  threshold: 0.85
+
+deploy:
+  target: gcp_cloud_run
+  region: us-east1

@@ -71,8 +71,8 @@ and latency of the results they reused. The real eval of demo-logistics is still
 | 0 Day 3 close-out | Done (real eval INCOMPLETE, see NEEDS HUMAN) | `27222c7` | 137 passed | `docs/teaching/15-measuring-quality.md`, `docs/16-deferred-ideas.md`, DC-016 |
 | 1 Observability + endpoints | Done | `46fbc0b` | 146 passed | `docs/teaching/16-observability.md`, `tests/day03/test_observability.py`, DC-017 |
 | 2 Day 4 platform | Done locally + in CI; cloud deploy is NEEDS HUMAN | PR #1: `af3f620`, `57a3f59`, `f19e899` (CI tested `37a85e0` = GitHub's merge of the PR) | 147 passed (laptop and CI) | CI run 43035141379 (green), notes 17-20, DC-018 |
-| 3a Kit generic | Not started | | | |
-| 3b Engagement #2 | Not started | | | |
+| 3a Kit generic | Done | `9097578` (tag `kit-generic`) | 164 passed; master CI 43037679612 green | DC-019..DC-029, `tests/day05/test_kit_generic.py` |
+| 3b Engagement #2 | Done (real eval: NEEDS HUMAN) | see 3b checklist | 171 passed | note 21, DC-030, `tests/day05/test_coastline_hvac.py` |
 | 3c Docs and closure | Not started | | | |
 
 ## 3. Definition of Done checklists
@@ -127,6 +127,27 @@ and latency of the results they reused. The real eval of demo-logistics is still
       Deploy and teardown sequence with cost per hour ($0.0373/h) in `docs/11-deployment-runbook.md` sections 4 and 7 and NEEDS HUMAN item 3.
 - [x] Notes 17-20, Day 4 status and journal, DC-018.
 
+### Phase 3a
+
+- [x] Gaps fixed generically, logistics unchanged (tests, fake eval 15/27, prompt sha `537c08f4c028`); one DC row per gap
+      (DC-019..DC-029); table in section 5.
+- [x] Tag `kit-generic` on `9097578` after master CI run 43037679612 was green (tag never moved).
+
+### Phase 3b
+
+- [x] Domain as briefed: HVAC field service, plans Basic/Plus/Premium with response-time SLAs and credits, work orders,
+      technicians, parts warranty, mock CMMS with `getWorkOrder`, `listWorkOrders`, `createDispatch` (write, approval),
+      policy docs incl. response-time SLA and credits, warranty, emergency vs routine, after-hours fees, escalation,
+      data privacy, and one planted injection line (`vendor-notes-q3.md#appendix`). Generated OpenAPI contract + drift test
+      (`test_cmms_contract_matches_the_committed_spec`).
+- [x] Playbook order: `discovery.md` first, then docs, data, config, golden set, evals (timings in note 21).
+- [x] Golden set 27 cases, same category minimums (`test_golden_set_meets_the_test_strategy_minimums` for coastline-hvac).
+- [x] End to end: ingest (30/8/48/120 rows, 11 docs, 35 chunks), chat, approval (paused `createDispatch` with T-07 / $75,
+      DSP-0001 only after approval), fake eval 19/27 via `/eval` (red team 5/5). Test `test_a_dispatch_pauses_for_approval_and_runs_only_after_it`.
+- [x] Zero `core/` changes since `kit-generic` (section 5).
+- [ ] Real eval of engagement #2: **not run** (quota; NEEDS HUMAN item 4).
+- [x] Note 21 with real timings and the zero-diff proof.
+
 ## 4. Evals
 
 ### demo-logistics
@@ -169,7 +190,14 @@ prompt sha unchanged. New tests: `tests/day05/test_kit_generic.py` (19 with the 
 
 ### Zero-diff proof for engagement #2
 
-(Phase 3b.)
+Before the 3b commit (working tree vs tag), captured in note 21 practicum 1:
+
+```text
+> git diff --stat kit-generic -- core/
+(lines: 0)
+```
+
+After the 3b commit: see the Phase 3b checklist (the same command over `kit-generic..HEAD`).
 
 ## 6. Decisions and deviations
 
@@ -249,6 +277,21 @@ Other spend: $0 (no cloud resources created).
    4.3 (enable `deploy.yml` with `gh variable set ...`), section 7 (`terraform destroy`, then `gcloud sql instances list` must
    show 0 items, and a billing check). Expected: `api_url` output and `/health` status ok with your commit. Send back:
    the api_url, the `/health` JSON, and confirmation that destroy left no Cloud SQL instance.
+
+4. **Real eval of engagement #2.** Why: needs about 75-90 model requests; the account allows 50 per day and they are
+   used by demo-logistics. Run it after demo-logistics is complete, on a new day (two windows: `.\tasks.ps1 cmms`, and
+   this one). Commands:
+   ```powershell
+   $env:FAKE_LLM = '0'
+   uv run python -m core.ingest.run --engagement coastline-hvac --docs-only
+   uv run python -m core.evals.run --engagement coastline-hvac
+   # if it stops with INCOMPLETE, the next day:
+   uv run python -m core.evals.run --engagement coastline-hvac --resume <the .json it printed>
+   Remove-Item Env:FAKE_LLM
+   uv run python -m core.ingest.run --engagement coastline-hvac --docs-only   # restore fake vectors
+   ```
+   Expected: a report in `engagements/coastline-hvac/evals/reports/`; cost about $0.005 on gpt-6-luna. Send back the report
+   file names; failing cases get a root cause like section 4.
 
 ## 10. Risks and open questions
 

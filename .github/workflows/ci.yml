@@ -63,7 +63,8 @@ jobs:
             uv run python -m core.ingest.run --engagement "$e"
           done
           uv run python services/mock-erp/app.py > mock-erp.log 2>&1 &
-          for i in $(seq 1 30); do curl -sf localhost:8100/health > /dev/null && break; sleep 1; done
+          uv run python services/mock-cmms/app.py > mock-cmms.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:8100/health > /dev/null && curl -sf localhost:8200/health > /dev/null && break; sleep 1; done
           for e in $(ls engagements | grep -v '^_'); do
             uv run python -m core.evals.run --engagement "$e"
           done

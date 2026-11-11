@@ -73,6 +73,7 @@ Colors show on GitHub. In VS Code's Markdown preview (Ctrl+Shift+V) the boxes st
 | 18 | [The robot reviewer](18-ci-cd.md) | GitHub Actions: tests with pgvector, fake eval, gitleaks, image scan, Compose and kind smoke tests; manual real eval; keyless deploy | 4 |
 | 19 | [Running on Kubernetes](19-kubernetes.md) | Helm chart, init containers, ConfigMap/Secret, probes, hardened pods, kind | 4 |
 | 20 | [Infrastructure as code](20-infrastructure-as-code.md) | Terraform for Cloud Run, Cloud SQL, Secret Manager, service accounts, Workload Identity Federation; cost per hour; destroy | 4 |
+| 21 | [A new customer is a new folder](21-second-engagement.md) | Kit-generic refactor, onboarding engagement #2 with the playbook, real timings, the zero-diff proof | 5 |
 
 ## How to use these notes
 

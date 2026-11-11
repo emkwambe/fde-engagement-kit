@@ -16,7 +16,7 @@ param(
   [Parameter(Position = 0)]
   [ValidateSet('help', 'setup', 'up', 'down', 'migrate', 'seed', 'ingest', 'eval', 'demo',
                'test', 'lint', 'kind-up', 'kind-down', 'ingest-remote', 'check-tools',
-               'erp', 'erp-spec', 'api', 'images', 'stack-down')]
+               'erp', 'erp-spec', 'api', 'images', 'stack-down', 'cmms', 'cmms-spec')]
   [string]$Task = 'help',
 
   [string]$Engagement = 'demo-logistics'
@@ -68,6 +68,8 @@ switch ($Task) {
       '  erp            Run the mock ERP (legacy system) at http://localhost:8100 (Day 2)',
       '  api            Run the API + agent console at http://localhost:8000        (Day 2)',
       '  erp-spec       Export the mock ERP''s OpenAPI contract to services/mock-erp/openapi.yaml',
+      '  cmms           Run the mock CMMS for coastline-hvac at http://localhost:8200 (Day 5)',
+      '  cmms-spec      Export the mock CMMS''s OpenAPI contract to services/mock-cmms/openapi.yaml',
       '  kind-up/-down  Create / delete the local Kubernetes cluster            (Day 4)',
       '  ingest-remote  Run ingestion as a Cloud Run job                       (Day 4)'
     )
@@ -125,6 +127,11 @@ switch ($Task) {
     uv run python services/mock-erp/app.py
   }
   'erp-spec' { Invoke-Step 'Export mock ERP OpenAPI spec' { uv run python services/mock-erp/app.py export-spec } }
+  'cmms' {
+    Write-Host 'Mock CMMS: http://localhost:8200/docs  (Ctrl+C to stop)' -ForegroundColor Green
+    uv run python services/mock-cmms/app.py
+  }
+  'cmms-spec' { Invoke-Step 'Export mock CMMS OpenAPI spec' { uv run python services/mock-cmms/app.py export-spec } }
   'kind-down' { Invoke-Step 'Delete kind cluster' { kind delete cluster --name fde } }
   'ingest-remote' {
     Assert-EngagementExists

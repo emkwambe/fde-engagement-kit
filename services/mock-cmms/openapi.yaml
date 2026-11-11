@@ -1,0 +1,382 @@
+openapi: 3.1.0
+info:
+  title: Coastline CMMS (mock)
+  description: 'Work orders and dispatches. Authenticate with `Authorization: Bearer
+    <token>`.'
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      tags:
+      - system
+      summary: Health
+      operationId: health
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /work-orders/{work_order_id}:
+    get:
+      tags:
+      - work orders
+      summary: Get the live status of one work order
+      operationId: getWorkOrder
+      parameters:
+      - name: work_order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Work Order Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkOrder'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /work-orders:
+    get:
+      tags:
+      - work orders
+      summary: List work orders, filtered by customer, status or priority
+      operationId: listWorkOrders
+      parameters:
+      - name: customer_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Exact customer id, e.g. CU-004
+          title: Customer Id
+        description: Exact customer id, e.g. CU-004
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - open
+            - dispatched
+            - closed
+            type: string
+          - type: 'null'
+          title: Status
+      - name: priority
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - emergency
+            - routine
+            type: string
+          - type: 'null'
+          title: Priority
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkOrder'
+                title: Response Listworkorders
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /dispatches:
+    post:
+      tags:
+      - dispatches
+      summary: 'Dispatch a technician to an open work order (a WRITE action: agents
+        must get approval first)'
+      operationId: createDispatch
+      parameters:
+      - name: x-client
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Client
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DispatchCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dispatch'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    Dispatch:
+      properties:
+        work_order_id:
+          type: string
+          pattern: ^WO-\d+$
+          title: Work Order Id
+          examples:
+          - WO-5040
+        tech_id:
+          type: string
+          pattern: ^T-\d{2}$
+          title: Tech Id
+          examples:
+          - T-02
+        priority:
+          type: string
+          enum:
+          - emergency
+          - routine
+          title: Priority
+        after_hours_fee_usd:
+          type: number
+          maximum: 150.0
+          minimum: 0.0
+          title: After Hours Fee Usd
+          description: From after-hours-fees.md; never above $150
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Reason
+        dispatch_id:
+          type: string
+          title: Dispatch Id
+          examples:
+          - DSP-0001
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        created_by:
+          type: string
+          title: Created By
+          description: Which client created it (from the X-Client header)
+      type: object
+      required:
+      - work_order_id
+      - tech_id
+      - priority
+      - after_hours_fee_usd
+      - reason
+      - dispatch_id
+      - created_at
+      - created_by
+      title: Dispatch
+    DispatchCreate:
+      properties:
+        work_order_id:
+          type: string
+          pattern: ^WO-\d+$
+          title: Work Order Id
+          examples:
+          - WO-5040
+        tech_id:
+          type: string
+          pattern: ^T-\d{2}$
+          title: Tech Id
+          examples:
+          - T-02
+        priority:
+          type: string
+          enum:
+          - emergency
+          - routine
+          title: Priority
+        after_hours_fee_usd:
+          type: number
+          maximum: 150.0
+          minimum: 0.0
+          title: After Hours Fee Usd
+          description: From after-hours-fees.md; never above $150
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Reason
+      type: object
+      required:
+      - work_order_id
+      - tech_id
+      - priority
+      - after_hours_fee_usd
+      - reason
+      title: DispatchCreate
+      description: Fields the dispatch rules require (technician-dispatch.md#dispatch-rules).
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    Health:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+        work_orders_loaded:
+          type: integer
+          title: Work Orders Loaded
+        dispatches:
+          type: integer
+          title: Dispatches
+      type: object
+      required:
+      - status
+      - work_orders_loaded
+      - dispatches
+      title: Health
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    WorkOrder:
+      properties:
+        work_order_id:
+          type: string
+          title: Work Order Id
+          examples:
+          - WO-5040
+        customer_id:
+          type: string
+          title: Customer Id
+        equipment_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Equipment Id
+        equipment_kind:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Equipment Kind
+        priority:
+          type: string
+          enum:
+          - emergency
+          - routine
+          title: Priority
+        status:
+          type: string
+          title: Status
+          description: open, dispatched or closed
+        opened_at:
+          type: string
+          format: date-time
+          title: Opened At
+        responded_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Responded At
+        tech_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tech Id
+        after_hours:
+          type: boolean
+          title: After Hours
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+      type: object
+      required:
+      - work_order_id
+      - customer_id
+      - priority
+      - status
+      - opened_at
+      - after_hours
+      title: WorkOrder

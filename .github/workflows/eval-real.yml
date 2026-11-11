@@ -66,6 +66,7 @@ jobs:
       - name: Start the mock systems
         run: |
           uv run python services/mock-erp/app.py > mock-erp.log 2>&1 &
+          uv run python services/mock-cmms/app.py > mock-cmms.log 2>&1 &
           sleep 3
       - name: Real eval
         # Inputs reach the shell through env vars, never pasted into the script (avoids script injection).
