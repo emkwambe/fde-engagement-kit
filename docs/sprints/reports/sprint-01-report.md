@@ -465,3 +465,5 @@ Sprint 01b commit is below.
 ```
 
 CI on the Sprint 01b commit `065ccf1`: run 43047112135, **success** (test, secrets, containers), 179 tests on the clean runner.
+
+Sponsor review of Sprint 01b and the eval runs after it: [sprint-01b-review.md](sprint-01b-review.md) (accepted; findings F-R3, F-R4; DC-033, DC-034).

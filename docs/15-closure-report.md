@@ -13,7 +13,7 @@ changes after a refactor that moved eleven customer-specific pieces into configu
 acts through generated API tools only after a human approves, is guarded against prompt injection and PII leaks, is
 observable (logs, metrics, traces joined by one id), ships as hardened containers, installs on Kubernetes, and passes CI
 on every push. Two things are not finished: the real-model quality gate (the eval is incomplete because the provider
-account allows 50 requests a day; every finished case passes, 19/19) and the cloud deployment (prepared and validated;
+account allows 50 requests a day; every finished case passes, 20/20) and the cloud deployment (prepared and validated;
 applying it is the sponsor's step).
 
 ## 2. Results vs. success criteria
@@ -22,11 +22,11 @@ applying it is the sponsor's step).
 |---|---|---|---|---|
 | SC-01 | Skills at target | >= 90% | After column drafted for the author to confirm ([skills matrix](03-skills-matrix.md)) | Sponsor to judge |
 | SC-02 | Reuse proven | 0 core changes for engagement #2 | 0 lines (`git diff kit-generic..e69d0b6 -- core/`, e69d0b6 = the engagement #2 commit); engagement #2 runs end to end. Core changed later only for the generic security fix of review finding F-R1 | **Met** |
-| SC-03 | Eval score | >= 85%, CI gate | Real: 19/19 finished cases pass, 8 of 27 not run (quota); CI runs the fake eval as a harness check, the real gate is a manual workflow | **Partly** (not measured on a complete run) |
+| SC-03 | Eval score | >= 85%, CI gate | Real: 20/20 finished cases pass, 7 of 27 not run (quota; see [01b review](sprints/reports/sprint-01b-review.md)); CI runs the fake eval as a harness check, the real gate is a manual workflow | **Partly** (not measured on a complete run) |
 | SC-04 | Deployed | Cloud Run URL via Terraform | Terraform validated, runbook and deploy workflow ready; not applied (rule 5) | **Not met** (NEEDS HUMAN) |
 | SC-05 | Reproducible | `.\tasks.ps1 demo` <= 15 min | Same steps on a clean CI runner, image builds included: about 3 min (run 43035141379); not timed on a clean laptop | **Partly** |
 | SC-06 | Documented | All docs complete; runbook validated | Docs and 22 teaching notes complete; runbook sections 2-3 validated in CI, section 4 not executed | **Partly** |
-| SC-07 | Budget | <= USD 55 | OpenAI under $0.01 for the whole project (eval chat $0.0053 measured + embedding re-ingests at most $0.0011 each, not metered); GCP $0 | **Met** |
+| SC-07 | Budget | <= USD 55 | OpenAI under $0.01 for the whole project (eval chat $0.0058 measured + embedding re-ingests at most $0.0011 each, not metered); GCP $0 | **Met** |
 
 ## 3. Skills outcome (primary objective)
 
@@ -57,7 +57,7 @@ applying it is the sponsor's step).
 | FR-17 | Multi-cloud Terraform (Won't) | Out of scope | n/a |
 | NFR-01 | Clean clone to demo <= 15 min | CI clean runner about 3 min; laptop timing NEEDS HUMAN | Partly |
 | NFR-02 | 0 core lines for a new engagement | Empty diff since `kit-generic` | Met |
-| NFR-03 | Eval >= 85% | 19/19 finished; incomplete | Partly |
+| NFR-03 | Eval >= 85% | 20/20 finished; incomplete (7 not run) | Partly |
 | NFR-04 | p95 /chat <= 8 s (cloud) | Not measured in the cloud; real eval cases locally: p95 15-17 s per case | Not met (unmeasured target environment; risk) |
 | NFR-05 | No secrets in code | gitleaks over full history in CI: no leaks | Met |
 | NFR-06 | Read-only DB credentials | `agent_ro`: SELECT, read-only transactions, test for INSERT refusal | Met |
@@ -112,6 +112,8 @@ applying it is the sponsor's step).
 | Laptop memory under the 3 GB floor | Browser + Docker VM | Container proofs moved to CI |
 | Sponsor review F-R1 (HIGH): the planned Cloud Run API was public, so anyone could approve writes or spend quota | Access was designed per endpoint (admin token) instead of per deployment; "by" is self-declared | API IAM-only with proxy access; reviewer and chat tokens; audit `token_verified` (DC-031, T-10, R-13) |
 | Sponsor review F-R2 (MEDIUM): `.\tasks.ps1` shown as ".TAB asks.ps1" in tasks.ps1 and the report | Edit scripts passed through a heredoc that collapsed `\\` before Python read `\t` as TAB | Fixed; repo scanned; test fails on TAB+"asks.ps1" or control characters (DC-032) |
+| Sponsor review F-R3 (LOW): two API tests failed instead of skipping with Postgres down | They opened the database through `/eval` without asking for the database fixture | Both depend on `migrated_db` now (DC-034) |
+| Commit 4a7c808 titled "Real eval complete" for an INCOMPLETE report (F-R4) | A commit step meant only for exit code 0 was run anyway | Not rewritten (rule 7); corrected in DC-033; the commit step is now conditional on exit code 0 |
 | Logistics content inside `core/` | Built for one customer first | Eleven gaps moved to config (DC-019..DC-029) |
 
 | What went well | What didn't | What I'd do differently next engagement |

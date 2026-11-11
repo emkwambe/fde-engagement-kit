@@ -101,7 +101,9 @@ def test_eval_endpoint_refuses_real_model_runs(monkeypatch):
     assert resp.status_code == 409 and "CLI or CI" in resp.json()["detail"]
 
 
-def test_eval_endpoint_runs_fake_cases(monkeypatch):
+@pytest.mark.db
+def test_eval_endpoint_runs_fake_cases(migrated_db, monkeypatch):
+    """The /eval route builds the agent service, which reads the database schema: needs Postgres (DC-034)."""
     monkeypatch.setenv("ADMIN_TOKEN", "t")
     monkeypatch.setattr("core.evals.run.preflight", lambda cfg: None)  # red-team cases need no DB, ERP or vectors
     with TestClient(api.app) as c:

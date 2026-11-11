@@ -56,8 +56,12 @@ def test_without_the_chat_token_chat_answers_401(monkeypatch):
         assert ok.status_code == 200   # blocked by the input guardrail, so no model call and no database needed
 
 
-def test_admin_token_also_works_in_its_own_header(monkeypatch):
-    """Behind `gcloud run services proxy` the Authorization header carries Google's identity token."""
+@pytest.mark.db
+def test_admin_token_also_works_in_its_own_header(migrated_db, monkeypatch):
+    """Behind `gcloud run services proxy` the Authorization header carries Google's identity token.
+
+    /eval builds the agent service, which reads the database schema: needs Postgres (DC-034).
+    """
     monkeypatch.setenv("ADMIN_TOKEN", "adm")
     monkeypatch.setattr("core.evals.run.preflight", lambda cfg: None)
     with TestClient(api.app) as c:
