@@ -63,8 +63,8 @@ Colors show on GitHub. In VS Code's Markdown preview (Ctrl+Shift+V) the boxes st
 | 08 | [Answering with receipts](08-cited-answers.md) | RAG prompt, citations, the "I don't know" gate, prompt injection | 1 |
 | 09 | [Proving it works](09-tests-and-api.md) | Tests, fakes, acceptance tests, the API | 1 |
 | 10 | [The legacy system](10-mock-erp.md) | Mock ERP: REST API, OpenAPI contract, bearer auth, drift test | 2 |
-| 11 | Tools from a spec | Tool generator, read-only SQL tool, approval flags | 2 (next) |
-| 12 | The agent graph | LangGraph: plan, tools, state, checkpoints | 2 |
+| 11 | [Tools from a spec](11-tools-from-a-spec.md) | Tool generator, read-only SQL tool, approval flags | 2 |
+| 12 | The agent graph | LangGraph: plan, tools, state, checkpoints | 2 (next) |
 | 13 | Asking permission | Human-in-the-loop approval, `/chat` upgrade | 2 |
 
 ## How to use these notes

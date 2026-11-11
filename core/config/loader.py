@@ -8,10 +8,16 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 
 from core.config.schema import EngagementConfig
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Read the project's .env once, at import time, so every script and server sees the same
+# settings without having to run tasks.ps1 first. Variables already set in the environment
+# win (override=False), so CI and tests stay in control.
+load_dotenv(REPO_ROOT / ".env", override=False)
 ENGAGEMENTS_DIR = REPO_ROOT / "engagements"
 _ENV_REF = re.compile(r"\$\{([A-Z0-9_]+)(?::-([^}]*))?\}")  # ${VAR} or ${VAR:-default}
 
