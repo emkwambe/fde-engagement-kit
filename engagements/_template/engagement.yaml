@@ -1,0 +1,67 @@
+# Engagement configuration — copy this folder for each new customer.
+# Secrets are never written here; use ${ENV_VAR} references.
+
+engagement:
+  name: customer-slug
+  customer: Customer Name
+  description: One-line problem statement from discovery.md
+
+llm:
+  provider: openai            # openai | anthropic | azure_openai | bedrock | vertex | fake
+  model: ${LLM_MODEL}         # set a current model name; verify pricing
+  temperature: 0
+  max_steps: 8
+
+embeddings:
+  provider: openai
+  model: text-embedding-3-small   # verify still current; changing it requires re-ingest
+  dimensions: 1536
+
+vector_store:
+  backend: pgvector           # pgvector | faiss | chroma
+  dsn: ${DATABASE_URL}
+
+retrieval:
+  top_k: 5
+  hybrid: true
+  chunk_size: 800
+  chunk_overlap: 100
+  min_score: 0.3      # tune per engagement with evals (Day 3)
+
+sources:
+  documents:
+    - type: local             # local | gcs | s3 | azure_blob
+      path: engagements/customer-slug/data/docs
+      include: ["*.pdf", "*.md", "*.docx", "*.html"]
+  tables:
+    - type: csv               # csv | json | sql
+      path: engagements/customer-slug/data/tables
+      target_schema: ops
+
+tools:
+  sql:
+    enabled: true
+    dsn: ${AGENT_RO_DATABASE_URL}   # read-only role
+    schema: ops
+    tables: []                      # empty = all tables in schema
+    row_limit: 200
+  openapi:
+    - spec: engagements/customer-slug/specs/system.yaml
+      base_url: ${SYSTEM_API_URL}
+      auth: { type: bearer, token: "${SYSTEM_API_TOKEN}" }
+      include_operations: []        # empty = all
+      require_approval: [POST, PUT, PATCH, DELETE]
+  extensions: []                    # python paths under extensions/, only if truly needed
+
+guardrails:
+  pii_redaction: [email, phone, ssn]
+  injection_filter: true
+  log_prompts: false
+
+evals:
+  golden_set: engagements/customer-slug/evals/golden.jsonl
+  threshold: 0.85
+
+deploy:
+  target: gcp_cloud_run       # gcp_cloud_run | kind | compose
+  region: us-east1

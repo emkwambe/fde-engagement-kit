@@ -1,0 +1,63 @@
+engagement:
+  name: demo-logistics
+  customer: Northwind Logistics (fictional)
+  description: Late-shipment inquiry copilot across policy docs, reporting DB, and legacy ERP.
+
+llm:
+  provider: openai
+  model: ${LLM_MODEL}
+  temperature: 0
+  max_steps: 8
+
+embeddings:
+  provider: openai
+  model: text-embedding-3-small
+  dimensions: 1536
+
+vector_store:
+  backend: pgvector
+  dsn: ${DATABASE_URL}
+
+retrieval:
+  top_k: 5
+  hybrid: true
+  chunk_size: 800
+  chunk_overlap: 100
+  min_score: 0.3      # tune per engagement with evals (Day 3)
+
+sources:
+  documents:
+    - type: local
+      path: engagements/demo-logistics/data/docs
+      include: ["*.pdf", "*.md", "*.docx"]
+  tables:
+    - type: csv
+      path: engagements/demo-logistics/data/tables   # customers, orders, shipments
+      target_schema: ops
+
+tools:
+  sql:
+    enabled: true
+    dsn: ${AGENT_RO_DATABASE_URL}
+    schema: ops
+    tables: [customers, orders, shipments, sla_breaches]
+    row_limit: 200
+  openapi:
+    - spec: services/mock-erp/openapi.yaml
+      base_url: ${ERP_API_URL}
+      auth: { type: bearer, token: "${ERP_API_TOKEN}" }
+      include_operations: [getShipment, listShipments, createTicket, getTicket]
+      require_approval: [POST, PUT, PATCH, DELETE]
+
+guardrails:
+  pii_redaction: [email, phone]
+  injection_filter: true
+  log_prompts: false
+
+evals:
+  golden_set: engagements/demo-logistics/evals/golden.jsonl
+  threshold: 0.85
+
+deploy:
+  target: gcp_cloud_run
+  region: us-east1

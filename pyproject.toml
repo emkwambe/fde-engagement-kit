@@ -1,0 +1,49 @@
+[project]
+name = "fde-engagement-kit"
+version = "0.1.0"
+description = "Reusable kit for delivering enterprise GenAI agents (RAG + SQL + API tools) the FDE way."
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.8",
+  "pyyaml>=6.0",
+  "psycopg[binary]>=3.2",
+  "pgvector>=0.3",
+  "numpy>=1.26",
+  "langchain-core>=0.3",
+  "langchain-openai>=0.2",
+  "tiktoken>=0.7",
+  "pypdf>=5.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "types-PyYAML",
+  "httpx>=0.27",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "db: needs a running Postgres with pgvector (DATABASE_URL)",
+  "day01: Day 1 acceptance tests for the RAG core you implement",
+]
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
