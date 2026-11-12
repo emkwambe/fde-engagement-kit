@@ -12,9 +12,9 @@ changes after a refactor that moved eleven customer-specific pieces into configu
 (`git diff --stat kit-generic..HEAD -- core/` is empty). The agent answers with citations, queries data read-only,
 acts through generated API tools only after a human approves, is guarded against prompt injection and PII leaks, is
 observable (logs, metrics, traces joined by one id), ships as hardened containers, installs on Kubernetes, and passes CI
-on every push. Two things are not finished: the real-model quality gate (the eval is incomplete because the provider
-account allows 50 requests a day; every finished case passes, 20/20) and the cloud deployment (prepared and validated;
-applying it is the sponsor's step).
+on every push. The real-model quality gate passes for engagement #1 (27/27, safety 100%, completed across two days
+because the provider account allows 50 requests a day). Two things are not finished: the real-model eval of
+engagement #2 and the cloud deployment (prepared and validated; applying it is the sponsor's step).
 
 ## 2. Results vs. success criteria
 
@@ -22,11 +22,11 @@ applying it is the sponsor's step).
 |---|---|---|---|---|
 | SC-01 | Skills at target | >= 90% | After column drafted for the author to confirm ([skills matrix](03-skills-matrix.md)) | Sponsor to judge |
 | SC-02 | Reuse proven | 0 core changes for engagement #2 | 0 lines (`git diff kit-generic..e69d0b6 -- core/`, e69d0b6 = the engagement #2 commit); engagement #2 runs end to end. Core changed later only for the generic security fix of review finding F-R1 | **Met** |
-| SC-03 | Eval score | >= 85%, CI gate | Real: 20/20 finished cases pass, 7 of 27 not run (quota; see [01b review](sprints/reports/sprint-01b-review.md)); CI runs the fake eval as a harness check, the real gate is a manual workflow | **Partly** (not measured on a complete run) |
+| SC-03 | Eval score | >= 85%, CI gate | Engagement #1 real: **27/27 = 100%, safety 100%, gate PASS** ([report 1550](../engagements/demo-logistics/evals/reports/2026-11-12-1550-gpt-6-luna-8967bdb.md); one golden case corrected first, DC-036). Engagement #2 real: not run yet. CI runs the fake eval as a harness check; the real gate is a manual workflow | **Met** for engagement #1; engagement #2 pending |
 | SC-04 | Deployed | Cloud Run URL via Terraform | Terraform validated, runbook and deploy workflow ready; not applied (rule 5) | **Not met** (NEEDS HUMAN) |
 | SC-05 | Reproducible | `.\tasks.ps1 demo` <= 15 min | Same steps on a clean CI runner, image builds included: about 3 min (run 43035141379); not timed on a clean laptop | **Partly** |
 | SC-06 | Documented | All docs complete; runbook validated | Docs and 22 teaching notes complete; runbook sections 2-3 validated in CI, section 4 not executed | **Partly** |
-| SC-07 | Budget | <= USD 55 | OpenAI under $0.01 for the whole project (eval chat $0.0058 measured + embedding re-ingests at most $0.0011 each, not metered); GCP $0 | **Met** |
+| SC-07 | Budget | <= USD 55 | OpenAI under $0.01 for the whole project (eval chat $0.0087 measured + embedding re-ingests at most $0.0011 each, not metered); GCP $0 | **Met** |
 
 ## 3. Skills outcome (primary objective)
 
@@ -57,7 +57,7 @@ applying it is the sponsor's step).
 | FR-17 | Multi-cloud Terraform (Won't) | Out of scope | n/a |
 | NFR-01 | Clean clone to demo <= 15 min | CI clean runner about 3 min; laptop timing NEEDS HUMAN | Partly |
 | NFR-02 | 0 core lines for a new engagement | Empty diff since `kit-generic` | Met |
-| NFR-03 | Eval >= 85% | 20/20 finished; incomplete (7 not run) | Partly |
+| NFR-03 | Eval >= 85% | Engagement #1: 27/27 (100%), safety 100%; engagement #2 not run | Met (engagement #1) |
 | NFR-04 | p95 /chat <= 8 s (cloud) | Not measured in the cloud; real eval cases locally: p95 15-17 s per case | Not met (unmeasured target environment; risk) |
 | NFR-05 | No secrets in code | gitleaks over full history in CI: no leaks | Met |
 | NFR-06 | Read-only DB credentials | `agent_ro`: SELECT, read-only transactions, test for INSERT refusal | Met |
@@ -115,6 +115,7 @@ applying it is the sponsor's step).
 | Sponsor review F-R3 (LOW): two API tests failed instead of skipping with Postgres down | They opened the database through `/eval` without asking for the database fixture | Both depend on `migrated_db` now (DC-034) |
 | Commit 4a7c808 titled "Real eval complete" for an INCOMPLETE report (F-R4) | A commit step meant only for exit code 0 was run anyway | Not rewritten (rule 7); corrected in DC-033; the commit step is now conditional on exit code 0 |
 | Deploy workflow file invalid since Sprint 01b (F-R5); every push listed a failed 0-second run | An unquoted step name containing ": "; CI never parsed workflows it does not run | Name quoted; a test parses every workflow (DC-035) |
+| First complete real eval failed its gate: q-025 safety 0.8 | The model refused `DROP TABLE orders` and called no tool, but quoted the command; `must_not` also searches the answer, and the case lacked `expect_refusal` | Case corrected with evidence (DC-036): any tool call fails it, quoting is allowed; re-run 27/27, gate PASS |
 | Logistics content inside `core/` | Built for one customer first | Eleven gaps moved to config (DC-019..DC-029) |
 
 | What went well | What didn't | What I'd do differently next engagement |

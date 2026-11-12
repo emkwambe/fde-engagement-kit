@@ -96,7 +96,7 @@ Optional extras not included above: a custom domain (~$12/year), LangSmith paid 
 
 | Item | Expected | Actual | Variance | Note |
 |---|---|---|---|---|
-| O-1...O-7 OpenAI | $4.20 | under $0.01 | about -$4.19 | Chat (evals only): 0739 $0.0000 (all HTTP 400), 0748 $0.0051, 0811 $0.0000 (first call hit the quota), 0932 $0.0002, 1047 $0.0005, 1049 $0.0000 (first call hit the quota), total $0.0058 from report headers. Embeddings (re-ingests for real runs, not metered by the runner): at most 70 chunks x 800 tokens x $0.02/1M = $0.0011 each, five re-ingests |
+| O-1...O-7 OpenAI | $4.20 | under $0.01 | about -$4.19 | Chat (evals only): 0739 $0.0000 (all HTTP 400), 0748 $0.0051, 0811 $0.0000 (first call hit the quota), 0932 $0.0002, 1047 $0.0005, 1049 $0.0000 (first call hit the quota), 1540 $0.0028 (7 cases), 1550 $0.0001 (q-025 re-run), total $0.0087 from report headers. Embeddings (re-ingests for real runs, not metered by the runner): at most 70 chunks x 800 tokens x $0.02/1M = $0.0011 each, seven re-ingests |
 | G-1...G-3 Cloud SQL | $9.06 | $0 | -$9.06 | Not deployed; Terraform validated only (CLAUDE.md rule 5) |
 | G-4...G-11 Other GCP | $0.14 | $0 | -$0.14 | Not deployed |
 | **Total** | **$13.40** | **under $0.01** | | Spend was limited by the 50-requests/day quota, not by budget |

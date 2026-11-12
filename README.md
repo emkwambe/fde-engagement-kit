@@ -4,8 +4,8 @@ A reusable kit for delivering enterprise GenAI agents the way a Forward Deployed
 problem, connect their documents, database and APIs, ship an agent that is measured by evals, deploy it, and hand it over.
 A new customer is a new folder under `engagements/`, with no changes to `core/`.
 
-Status (2026-11-11, end of Sprint 01): two engagements run on one core; CI is green; the real-model eval of engagement #1
-is incomplete because of the provider's daily request quota; the cloud deployment is prepared but not applied.
+Status (2026-11-12): two engagements run on one core; CI is green; the real-model eval of engagement #1 is complete and
+passes its gate (27/27, safety 100%); engagement #2's real eval and the cloud deployment are still to do.
 Details and evidence: [sprint report](docs/sprints/reports/sprint-01-report.md), [closure report](docs/15-closure-report.md).
 
 ## What the agent does
@@ -25,7 +25,7 @@ Details and evidence: [sprint report](docs/sprints/reports/sprint-01-report.md),
 | Systems | 20 policy docs, `ops` schema, mock ERP (shipments, tickets) | 11 policy docs, `field` schema, mock CMMS (work orders, dispatches) |
 | Write that needs approval | `createTicket` (credit ticket) | `createDispatch` (send a technician) |
 | Folder | [engagements/demo-logistics](engagements/demo-logistics/) | [engagements/coastline-hvac](engagements/coastline-hvac/) |
-| Real-model eval | gpt-6-luna, prompt agent-v1: 18/18 finished cases pass, 9 not run (quota) -> [latest report](engagements/demo-logistics/evals/reports/2026-11-11-0811-gpt-6-luna-cadb61d.md) | Not run yet (quota) |
+| Real-model eval | gpt-6-luna, prompt agent-v1: **27/27, safety 100%, gate PASS** -> [report](engagements/demo-logistics/evals/reports/2026-11-12-1550-gpt-6-luna-8967bdb.md) | Not run yet (quota) |
 | Zero-core-change proof | - | `git diff --stat kit-generic..e69d0b6 -- core/` is empty: e69d0b6 is the commit that added engagement #2 ([note 21](docs/teaching/21-second-engagement.md)). Later core commits are generic review fixes (DC-031) |
 
 ## Architecture
